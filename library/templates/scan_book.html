@@ -1,0 +1,437 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan Book - Library</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <style>
+        #qr-reader {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+        }
+
+        .scanner-container {
+            background: var(--surface);
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            max-width: 600px;
+            margin: 2rem auto;
+            text-align: center;
+        }
+
+        .scan-tips {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 1rem;
+            text-align: left;
+            padding: 1rem;
+            background: var(--neutral-bg);
+            border-radius: var(--radius-sm);
+        }
+    </style>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions" style="margin-bottom: 2rem;">
+            <h1>Scan Book to Request</h1>
+        </div>
+
+        <div class="scanner-container card">
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Scan a book's Barcode or QR code to send a
+                borrow request to the library staff.</p>
+
+            <div id="qr-reader" style="margin-bottom: 1.5rem;"></div>
+
+            <div id="scan-result" class="alert" style="display: none; margin-bottom: 1.5rem;"></div>
+
+            <div id="book-preview"
+                style="display: none; text-align: left; background: var(--neutral-bg); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
+                <!-- Book Data injected here -->
+            </div>
+
+            <div id="manual-entry-div" style="margin-bottom: 1.5rem;">
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;">Scanner not working?
+                    Enter ID
+                    manually:</p>
+                <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                    <input type="text" id="manualId" placeholder="e.g. f6c4a2e8-18b"
+                        style="padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); width: 180px; font-family: monospace;">
+                    <button class="btn btn-outline" onclick="handleManualEntry()">Find Book</button>
+                </div>
+            </div>
+
+            <div>
+                <button class="btn btn-primary" id="startScanBtn" onclick="startScanner()">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="vertical-align: middle; margin-right: 0.5rem;">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                        </path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                    </svg> Start Scanner
+                </button>
+                <button class="btn btn-outline"
+                    style="border-color: var(--danger); color: var(--danger); display: none;" id="stopScanBtn"
+                    onclick="stopScanner()">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="vertical-align: middle; margin-right: 0.5rem;">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    </svg> Stop Scanner
+                </button>
+                <button class="btn btn-primary" style="display: none;" id="requestBtn" onclick="submitRequest()">
+                    Send Request
+                </button>
+            </div>
+
+            <div class="scan-tips">
+                <strong>Tips for 1D Barcodes:</strong>
+                <ul style="margin: 0.5rem 0 0 1.2rem; padding: 0;">
+                    <li>Ensure the barcode is horizontal inside the box.</li>
+                    <li>Avoid glare/reflections from phone screens.</li>
+                    <li>Slowly move your phone closer or further to focus.</li>
+                    <li>Center the barcode until the green light flashes.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/api.js' %}?v=8"></script>
+    <script src="{% static 'js/auth.js' %}?v=8"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        #qr-reader {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            background: #000;
+        }
+
+        .scanner-active {
+            border: 2px solid var(--primary) !important;
+            box-shadow: 0 0 25px rgba(37, 99, 235, 0.3) !important;
+        }
+
+        @keyframes scanning-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 15px rgba(37, 99, 235, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+            }
+        }
+
+        .scanner-active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 5;
+            pointer-events: none;
+            animation: scanning-pulse 2s infinite;
+            border-radius: 12px;
+        }
+
+        #scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            box-shadow: 0 0 15px var(--primary);
+            top: 10%;
+            z-index: 10;
+            animation: scan-move 2.5s ease-in-out infinite;
+            pointer-events: none;
+            display: none;
+        }
+
+        .scanner-active #scan-line {
+            display: block;
+        }
+
+        @keyframes scan-move {
+            0% {
+                top: 10%;
+                opacity: 0.3;
+            }
+
+            50% {
+                top: 90%;
+                opacity: 1;
+            }
+
+            100% {
+                top: 10%;
+                opacity: 0.3;
+            }
+        }
+
+        .scanner-success-anim {
+            animation: success-pulse 0.5s ease-out;
+        }
+
+        @keyframes success-pulse {
+            0% {
+                transform: scale(1);
+                filter: brightness(1);
+            }
+
+            50% {
+                transform: scale(1.03);
+                filter: brightness(1.2);
+            }
+
+            100% {
+                transform: scale(1);
+                filter: brightness(1);
+            }
+        }
+
+        #scan-result {
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transform: translateY(-10px);
+            opacity: 0;
+        }
+
+        #scan-result.show {
+            transform: translateY(0) !important;
+            opacity: 1 !important;
+            display: block !important;
+        }
+    </style>
+    <script>
+        let html5QrcodeScanner = null;
+        let scannedBookId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            requireAuth();
+            requireRole('student');
+        });
+
+        function onScanSuccess(decodedText, decodedResult) {
+            console.log("Scan Result Detected:", decodedText);
+
+            // Haptic feedback
+            if (window.navigator && window.navigator.vibrate) {
+                window.navigator.vibrate(40);
+            }
+
+            const text = decodedText.trim().toUpperCase();
+
+            // Leniency: handle common misreads like 8 for B or O for 0
+            const regex = /(BOOK|B00K|B0OK|BO0K|800K|COPY|C0PY)\s*[:\s]\s*([A-F0-9\-]+)/i;
+            const match = text.match(regex);
+
+            if (match) {
+                stopScanner();
+                let prefix = match[1].toUpperCase();
+                // Normalize any book prefix to BOOK
+                if (prefix.includes('O') || prefix.includes('0') || prefix.startsWith('8')) {
+                    if (prefix.includes('K')) prefix = 'BOOK';
+                    if (prefix.includes('PY')) prefix = 'COPY';
+                }
+                const shortId = match[2];
+                const normalizedText = `${prefix}:${shortId}`;
+
+                console.log("Normalized for API:", normalizedText);
+                fetchBookDetails(normalizedText);
+            } else {
+                // Raw ID approach: if it looks like a UUID or part of one (8+ chars)
+                if (/[A-F0-9]{8,}/i.test(text)) {
+                    stopScanner();
+                    fetchBookDetails(text);
+                }
+            }
+        }
+
+        async function fetchBookDetails(qrText) {
+            const resDiv = document.getElementById('scan-result');
+            const previewDiv = document.getElementById('book-preview');
+            const reqBtn = document.getElementById('requestBtn');
+            const startBtn = document.getElementById('startScanBtn');
+            const manualDiv = document.getElementById('manual-entry-div');
+
+            resDiv.className = 'alert alert-info show';
+            resDiv.innerHTML = 'Fetching book details...';
+            resDiv.style.display = 'block';
+            previewDiv.style.display = 'none';
+            reqBtn.style.display = 'none';
+            startBtn.style.display = 'none';
+            if (manualDiv) manualDiv.style.display = 'none';
+
+            try {
+                const data = await fetchAPI(`books/by-qr/?qr_text=${encodeURIComponent(qrText)}`);
+
+                scannedBookId = data.id;
+                resDiv.style.display = 'none';
+
+                previewDiv.innerHTML = `
+                    <h3 style="margin-top:0; color:var(--primary);">${data.title}</h3>
+                    <p style="margin: 0.25rem 0;"><strong>Author:</strong> ${data.author_name}</p>
+                    <p style="margin: 0.25rem 0;"><strong>Category:</strong> ${data.category}</p>
+                    <p style="margin: 0.25rem 0;"><strong>Available Copies:</strong> <span style="color: ${data.available_copies > 0 ? 'var(--success)' : 'var(--danger)'}; font-weight:bold;">${data.available_copies}</span></p>
+                `;
+                previewDiv.style.display = 'block';
+                previewDiv.classList.add('scanner-success-anim');
+                reqBtn.style.display = 'inline-block';
+
+            } catch (error) {
+                resDiv.className = 'alert alert-error';
+                const errorMsg = error.data?.detail || 'Failed to fetch book data. Please check the ID.';
+                resDiv.textContent = `Error: ${errorMsg}`;
+                showToast(errorMsg, 'error');
+
+                setTimeout(() => {
+                    startBtn.style.display = 'inline-block';
+                    if (manualDiv) manualDiv.style.display = 'block';
+                    resDiv.style.display = 'none';
+                }, 4000);
+            }
+        }
+
+        async function submitRequest() {
+            if (!scannedBookId) return;
+
+            const resDiv = document.getElementById('scan-result');
+            const startBtn = document.getElementById('startScanBtn');
+            const reqBtn = document.getElementById('requestBtn');
+            const manualDiv = document.getElementById('manual-entry-div');
+
+            showLoader();
+            try {
+                await fetchAPI('requests/', {
+                    method: 'POST',
+                    body: JSON.stringify({ book: scannedBookId })
+                });
+
+                resDiv.className = 'alert alert-success';
+                resDiv.innerHTML = "<strong>Success!</strong> Your request has been sent to the library administrators.";
+                resDiv.style.display = 'block';
+                reqBtn.style.display = 'none';
+                showToast("Request sent successfully!", "success");
+
+            } catch (err) {
+                resDiv.className = 'alert alert-error';
+                resDiv.textContent = err.data?.detail || "Failed to submit request.";
+                resDiv.style.display = 'block';
+            } finally {
+                hideLoader();
+                setTimeout(() => {
+                    startBtn.style.display = 'inline-block';
+                    if (manualDiv) manualDiv.style.display = 'block';
+                }, 4000);
+            }
+        }
+
+        function startScanner() {
+            if (!html5QrcodeScanner) {
+                html5QrcodeScanner = new Html5Qrcode("qr-reader");
+            }
+
+            const readerElem = document.getElementById('qr-reader');
+            readerElem.innerHTML = '<div id="scan-line"></div>';
+            readerElem.classList.add('scanner-active');
+
+            document.getElementById('book-preview').style.display = 'none';
+            document.getElementById('requestBtn').style.display = 'none';
+            document.getElementById('scan-result').style.display = 'none';
+            document.getElementById('scan-result').classList.remove('show');
+            document.getElementById('manual-entry-div').style.display = 'none';
+
+            const config = {
+                fps: 15,
+                qrbox: (viewfinderWidth, viewfinderHeight) => {
+                    const width = Math.min(viewfinderWidth * 0.95, 600);
+                    const height = Math.min(viewfinderHeight * 0.45, 250);
+                    return { width: width, height: height };
+                },
+                aspectRatio: 1.0,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                },
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.CODE_39
+                ]
+            };
+
+            html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                (errorMessage) => { }
+            )
+                .then(() => {
+                    document.getElementById('startScanBtn').style.display = 'none';
+                    document.getElementById('stopScanBtn').style.display = 'inline-block';
+                    showToast("Scanner active. Align barcode horizontally.", "info");
+                })
+                .catch(err => {
+                    console.error("Error starting scanner", err);
+                    let msg = "Could not start camera.";
+                    showToast(msg, "error");
+
+                    const resDiv = document.getElementById('scan-result');
+                    resDiv.className = 'alert alert-error';
+                    resDiv.textContent = msg + " Please ensure camera permissions are granted.";
+                    resDiv.style.display = 'block';
+                    document.getElementById('manual-entry-div').style.display = 'block';
+                });
+        }
+
+        function stopScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then(() => {
+                    document.getElementById('qr-reader').classList.remove('scanner-active');
+                    document.getElementById('startScanBtn').style.display = 'inline-block';
+                    document.getElementById('stopScanBtn').style.display = 'none';
+                    document.getElementById('manual-entry-div').style.display = 'block';
+                }).catch(err => {
+                    console.error("Error stopping scanner", err);
+                });
+            }
+        }
+
+        function handleManualEntry() {
+            const input = document.getElementById('manualId');
+            const val = input.value.trim().toUpperCase();
+            if (!val) {
+                showToast("Please enter a valid Book ID.", "warning");
+                return;
+            }
+
+            // Normalize prefix if they didn't include it
+            let finalId = val;
+            if (!val.includes(':')) {
+                finalId = "BOOK:" + val;
+            } else {
+                finalId = val.replace("B00K", "BOOK");
+            }
+
+            fetchBookDetails(finalId);
+        }
+    </script>
+</body>
+
+</html>

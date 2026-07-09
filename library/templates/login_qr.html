@@ -1,0 +1,202 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Login - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+    <style>
+        .scan-guide {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 82%;
+            height: 35%;
+            border: 3px solid #6366f1;
+            border-radius: 8px;
+            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 5;
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        .scan-guide::after {
+            content: '▾  Point at the barcode at the bottom of your ID card  ▾';
+            position: absolute;
+            bottom: -34px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 0.72rem;
+            color: white;
+            background: #6366f1;
+            padding: 3px 14px;
+            border-radius: 20px;
+            font-family: Inter, sans-serif;
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                border-color: #6366f1;
+                box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(99, 102, 241, .6);
+            }
+
+            50% {
+                border-color: #818cf8;
+                box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5), 0 0 8px 4px rgba(99, 102, 241, .4);
+            }
+        }
+
+        .tip-box {
+            background: #f0f4ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 10px;
+            padding: 0.9rem 1rem;
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: #3730a3;
+            line-height: 1.6;
+        }
+
+        .tip-box strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #4338ca;
+        }
+    </style>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container" style="display:flex; justify-content:center; align-items:flex-start; padding-top:2rem;">
+        <div class="auth-card" style="max-width: 480px; width: 100%;">
+            <div class="auth-header">
+                <h1>ID Card Login</h1>
+                <p>Scan the <strong>barcode at the bottom</strong> of your college ID card.</p>
+            </div>
+
+            <div id="reader-container"
+                style="margin-top: 1.2rem; border-radius: 12px; overflow: hidden; background: #111; position: relative; aspect-ratio: 16/10;">
+                <div id="reader" style="width:100%; height:100%;"></div>
+                <div class="scan-guide" id="scan-guide" style="display:none;"></div>
+
+                <!-- Start screen -->
+                <div id="scanner-overlay"
+                    style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); z-index:10; color:white;">
+                    <button id="start-btn" class="btn btn-primary" style="padding:0.75rem 2.5rem; font-size:1rem;">
+                        📷 Start Scanner
+                    </button>
+                    <p style="margin-top:0.75rem; font-size:0.8rem; color:rgba(255,255,255,0.7);">Camera permission
+                        required</p>
+                </div>
+            </div>
+
+            <div id="login-status" style="margin-top:1rem; text-align:center; min-height:22px; font-size:0.85rem;">
+            </div>
+
+            <div class="tip-box">
+                <strong>📋 How to scan your ID card:</strong>
+                1. Click <em>Start Scanner</em><br>
+                2. Hold your ID card with the <strong>barcode facing the camera</strong><br>
+                3. Align the barcode inside the purple box<br>
+                4. Keep it steady — you'll be logged in automatically!
+            </div>
+
+            <div style="text-align:center; margin-top:1.5rem;">
+                <a href="/" style="color:var(--text-muted); text-decoration:none; font-size:0.85rem;">← Back to Password
+                    Login</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let html5QrCode;
+        let loginInProgress = false;
+
+        const statusDiv = document.getElementById('login-status');
+        const overlay = document.getElementById('scanner-overlay');
+        const guide = document.getElementById('scan-guide');
+
+        document.getElementById('start-btn').addEventListener('click', startScanner);
+
+        function startScanner() {
+            overlay.style.display = 'none';
+            html5QrCode = new Html5Qrcode("reader");
+
+            html5QrCode.start(
+                { facingMode: "environment" },
+                {
+                    fps: 20,
+                    qrbox: { width: 320, height: 120 },   // wide & short — ideal for 1D barcodes
+                    aspectRatio: 1.6,
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.QR_CODE,
+                        Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.CODE_93,
+                    ]
+                },
+                onScanSuccess,
+                () => { }  // silence per-frame failures
+            ).then(() => {
+                guide.style.display = 'block';
+                setStatus('📷 Hold your ID card with the barcode facing the camera', '#475569');
+            }).catch(err => {
+                setStatus('❌ Camera access denied. Please allow camera permissions.', 'var(--danger)');
+                overlay.style.display = 'flex';
+            });
+        }
+
+        async function onScanSuccess(decodedText) {
+            if (loginInProgress) return;
+            loginInProgress = true;
+
+            guide.style.display = 'none';
+            try { await html5QrCode.stop(); } catch (_) { }
+
+            setStatus('🔐 Authenticating...', 'var(--primary)');
+
+            try {
+                const data = await fetchAPI('qr-login/', {
+                    method: 'POST',
+                    body: JSON.stringify({ qr_text: decodedText })
+                });
+
+                setStatus(`✅ Welcome, <strong>${data.user.name}</strong>! Redirecting...`, 'var(--success)');
+                sessionStorage.setItem('access_token', data.access);
+                sessionStorage.setItem('refresh_token', data.refresh);
+
+                const role = await checkAndStoreUserRole();
+                window.location.href = (role === 'admin') ? '/admin-dashboard/' : '/books/';
+
+            } catch (err) {
+                loginInProgress = false;
+                const msg = err.data?.detail || err.data?.error || err.message || 'Authentication failed';
+                setStatus(`❌ ${msg}`, 'var(--danger)');
+                setTimeout(() => {
+                    overlay.style.display = 'flex';
+                    setStatus('', '');
+                }, 3500);
+            }
+        }
+
+        function setStatus(html, color) {
+            statusDiv.innerHTML = color
+                ? `<span style="color:${color}">${html}</span>`
+                : html;
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,198 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Requests - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <!-- Delete wrapper structure, inject simple modal overlay -->
+    <div id="confirm-modal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div class="card" style="width:100%; max-width:400px; text-align:center;">
+            <h3 id="modal-title">Confirm Action</h3>
+            <p id="modal-desc" style="color:var(--text-muted); margin-bottom:1.5rem;">Are you sure?</p>
+            <div style="display:flex; justify-content:center; gap:1rem;">
+                <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" id="modal-confirm-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-container">
+        <div class="page-actions">
+            <h1>Manage Book Requests</h1>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Student</th>
+                        <th>Book</th>
+                        <th>Requested On</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-requests-tbody">
+                    <!-- Rows injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('admin');
+
+            const tbody = document.getElementById('admin-requests-tbody');
+
+            // Modal Logic
+            const modal = document.getElementById('confirm-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalDesc = document.getElementById('modal-desc');
+            const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+
+            let currentReqId = null;
+            let currentAction = null;
+            let currentPayload = null;
+
+            window.closeModal = function () {
+                modal.style.display = 'none';
+            };
+
+            function showModal(title, desc, onConfirm, buttonClass = 'btn-primary') {
+                modalTitle.textContent = title;
+                modalDesc.textContent = desc;
+                modalConfirmBtn.className = `btn ${buttonClass}`;
+
+                modalConfirmBtn.onclick = () => {
+                    closeModal();
+                    onConfirm();
+                };
+
+                modal.style.display = 'flex';
+            }
+
+            async function loadRequests() {
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const statusFilter = urlParams.get('status');
+
+                    const data = await fetchAPI('requests/');
+                    let requests = data.results || data;
+
+                    if (statusFilter) {
+                        requests = requests.filter(r => r.status === statusFilter);
+                    }
+
+                    if (requests.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No ${statusFilter ? statusFilter.toLowerCase() + ' ' : ''}requests found.</td></tr>`;
+                        return;
+                    }
+
+                    tbody.innerHTML = requests.map(r => {
+                        const isPending = r.status === 'PENDING';
+                        let actionButtons = '';
+                        let statusClass = 'badge-neutral';
+                        if (r.status === 'APPROVED') statusClass = 'badge-approved';
+                        if (r.status === 'REJECTED') statusClass = 'badge-rejected';
+                        if (r.status === 'PENDING') statusClass = 'badge-pending';
+                        if (r.status === 'WAITLISTED') statusClass = 'badge-pending'; // Recycled pending or warning class
+
+                        if (isPending) {
+                            actionButtons = `
+                                <div style="display:flex; gap:0.5rem; align-items:center;">
+                                    <input type="date" id="due-date-${r.id}" class="form-control" style="width:140px; padding:0.25rem 0.5rem; font-size:0.875rem;" title="Select Due Date">
+                                    <button class="btn btn-success" style="padding:0.25rem 0.75rem; font-size:0.75rem;" onclick="attemptAction(${r.id}, 'approve')">Approve</button>
+                                    <button class="btn btn-outline" style="padding:0.25rem 0.75rem; font-size:0.75rem; border-color:var(--warning); color:var(--warning);" onclick="attemptAction(${r.id}, 'waitlist')">Waitlist</button>
+                                    <button class="btn btn-danger" style="padding:0.25rem 0.75rem; font-size:0.75rem;" onclick="attemptAction(${r.id}, 'reject')">Reject</button>
+                                </div>
+                            `;
+                        } else {
+                            actionButtons = `<span style="color:var(--text-muted); font-size:0.875rem; font-weight:500;">Processed</span>`;
+                        }
+
+                        return `
+                            <tr>
+                                <td style="color:var(--text-muted);">#${r.id}</td>
+                                <td><div style="font-weight:500;">${r.student_name}</div></td>
+                                <td><div style="font-weight:600; color:var(--primary);">${r.book_title}</div></td>
+                                <td>${new Date(r.requested_at).toLocaleDateString('en-GB').replace(/\//g, '-')}</td>
+                                <td><span class="badge ${statusClass}">${r.status}</span></td>
+                                <td>${actionButtons}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                } catch (err) {
+                    console.error("Failed to load requests", err);
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red;">Error loading requests.</td></tr>`;
+                }
+            }
+
+            window.attemptAction = function (reqId, action) {
+                const payload = {};
+                if (action === 'approve') {
+                    const dateInput = document.getElementById(`due-date-${reqId}`);
+                    if (!dateInput || !dateInput.value) {
+                        showToast('Please select a Due Date for approval.', 'warning');
+                        return;
+                    }
+                    payload.due_date = dateInput.value;
+
+                    showModal('Approve Request', 'Are you sure you want to approve this book request?', () => {
+                        processRequest(reqId, action, payload);
+                    }, 'btn-success');
+                } else if (action === 'waitlist') {
+                    showModal('Waitlist Request', 'Are you sure you want to put this request on the waitlist? The user will be notified.', () => {
+                        processRequest(reqId, action, payload);
+                    }, 'btn-warning');
+                } else {
+                    showModal('Reject Request', 'Are you sure you want to reject this book request?', () => {
+                        processRequest(reqId, action, payload);
+                    }, 'btn-danger');
+                }
+            };
+
+            async function processRequest(reqId, action, payload) {
+
+                if (action === 'approve') {
+                    const dateInput = document.getElementById(`due-date-${reqId}`);
+                    if (!dateInput || !dateInput.value) {
+                        showAlert('Please select a Due Date for approval.', true);
+                        return;
+                    }
+                    payload.due_date = dateInput.value;
+                }
+
+                try {
+                    await fetchAPI(`requests/${reqId}/${action}/`, {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    showToast(`Request ${action}d successfully!`, 'success');
+                    loadRequests(); // refresh list
+                } catch (err) {
+                    const errorMsg = err.data?.detail || err.data?.error || `Failed to ${action} request.`;
+                    showToast(errorMsg, 'error');
+                }
+            }
+
+            loadRequests();
+        });
+    </script>
+</body>
+
+</html>

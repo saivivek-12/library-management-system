@@ -1,0 +1,80 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Requests - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions">
+            <h1>My Book Requests</h1>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Book Title</th>
+                        <th>Requested On</th>
+                        <th>Status</th>
+                        <th>Due Date (If Approved)</th>
+                    </tr>
+                </thead>
+                <tbody id="requests-tbody">
+                    <!-- Rows injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('student');
+
+            const tbody = document.getElementById('requests-tbody');
+
+            try {
+                const data = await fetchAPI('requests/');
+                const requests = data.results || data;
+
+                if (requests.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No requests found.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = requests.map(r => {
+                    const lstatus = (r.status || '').toLowerCase();
+                    let statusClass = 'badge-neutral';
+                    if (lstatus === 'approved') statusClass = 'badge-approved';
+                    if (lstatus === 'rejected') statusClass = 'badge-rejected';
+                    if (lstatus === 'pending') statusClass = 'badge-pending';
+
+                    return `
+                        <tr>
+                            <td style="font-weight:500; color:var(--primary);">${r.book_title}</td>
+                            <td>${new Date(r.requested_at).toLocaleDateString('en-GB').replace(/\//g, '-')}</td>
+                            <td><span class="badge ${statusClass}">${r.status}</span></td>
+                            <td>${r.due_date ? new Date(r.due_date).toLocaleDateString('en-GB').replace(/\//g, '-') : '<span style="color:var(--text-muted)">-</span>'}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Failed to load requests", err);
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">Error loading requests.</td></tr>`;
+            }
+        });
+    </script>
+</body>
+
+</html>

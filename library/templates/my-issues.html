@@ -1,0 +1,111 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Issues - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions">
+            <h1 class="page-title">My Issued Books</h1>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Book Title</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th>Return Date</th>
+                        <th>Fine</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="issues-tbody">
+                    <!-- Rows injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('student');
+
+            const tbody = document.getElementById('issues-tbody');
+
+            try {
+                const data = await fetchAPI('issues/');
+                const issues = data.results || data;
+
+                if (issues.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No issued books found.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = issues.map(i => {
+                    let statusLabel = '';
+                    let statusClass = '';
+
+                    if (i.is_returned) {
+                        statusLabel = 'Returned';
+                        statusClass = 'badge-approved';
+                    } else if (i.is_overdue) {
+                        statusLabel = 'Overdue';
+                        statusClass = 'badge-rejected';
+                    } else {
+                        statusLabel = 'Active';
+                        statusClass = 'badge-pending';
+                    }
+
+                    return `
+                        <tr class="${i.is_overdue ? 'row-danger' : ''}">
+                            <td style="font-weight:500; color:var(--primary);">${i.book_title}</td>
+                            <td>${new Date(i.issue_date).toLocaleDateString('en-GB').replace(/\//g, '-')}</td>
+                            <td>${new Date(i.due_date).toLocaleDateString('en-GB').replace(/\//g, '-')}</td>
+                            <td>${i.return_date ? new Date(i.return_date).toLocaleDateString('en-GB').replace(/\//g, '-') : '<span style="color:var(--text-muted)">-</span>'}</td>
+                            <td style="${i.fine > 0 ? 'color: var(--danger); font-weight: bold;' : ''}">₹${i.fine}</td>
+                            <td><span class="badge ${statusClass}">${statusLabel}</span></td>
+                            <td>
+                                ${!i.is_returned ? `<button class="btn btn-outline" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="returnBook(${i.id})">Return Book</button>` : `<span style="font-size:0.75rem; color:var(--text-muted);">Returned</span>`}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Failed to load issues", err);
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error loading issues.</td></tr>`;
+            }
+        });
+
+        window.returnBook = async function (issueId) {
+            if (!confirm("Are you sure you want to return this book? This will stop any further fine calculations.")) return;
+
+            showLoader();
+            try {
+                await fetchAPI(`issues/${issueId}/return_book/`, { method: 'POST' });
+                showToast('Book returned successfully!', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } catch (err) {
+                showToast(err.data?.detail || 'Failed to return book.', 'error');
+            } finally {
+                hideLoader();
+            }
+        }
+    </script>
+</body>
+
+</html>

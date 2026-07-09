@@ -1,0 +1,138 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container" style="display:flex; justify-content:center; width:100%;">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Welcome Back</h1>
+                <p>Sign in to your LibrarySaaS account</p>
+            </div>
+            <div id="login-alert" class="alert"></div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label class="form-label" for="username">Username</label>
+                    <input type="text" id="username" class="form-control" required placeholder="Enter your username">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <div style="position:relative;">
+                        <input type="password" id="password" class="form-control" required
+                            placeholder="Enter your password">
+                        <button type="button" onclick="togglePassword('password', this)"
+                            style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); font-size: 0.75rem; font-weight: 600; cursor:pointer;">SHOW</button>
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 0.5rem; margin-bottom: 1rem;">
+                    <a href="/forgot-password/"
+                        style="font-size: 0.875rem; color: var(--primary); text-decoration: none;">Forgot your
+                        password?</a>
+                </div>
+
+                <!-- Login Button -->
+                <button type="submit" class="btn btn-primary"
+                    style="width: 100%; margin-top: 0.5rem; padding: 0.75rem;">Sign In</button>
+
+                <div style="display: flex; align-items: center; margin: 1.5rem 0;">
+                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                    <span style="padding: 0 1rem; color: var(--text-muted); font-size: 0.875rem;">OR</span>
+                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                </div>
+
+                <a href="/login/barcode/" class="btn btn-outline"
+                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; text-decoration: none; border-color: #6366f1; color: #6366f1;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 5v14"></path>
+                        <path d="M21 5v14"></path>
+                        <path d="M7 5v14"></path>
+                        <path d="M12 5v14"></path>
+                        <path d="M17 5v14"></path>
+                    </svg>
+                    Login with ID Card
+                </a>
+            </form>
+
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <span style="color: var(--text-muted);">Don't have an account?</span>
+                <a href="/signup/" style="color: var(--primary); font-weight: 600; text-decoration: none;">Sign up
+                    here</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forgot Password logic moved to /forgot-password/ -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Redirect if already logged in
+            if (isAuthenticated()) {
+                const role = getUserRole();
+                if (role === 'admin') window.location.href = '/admin-dashboard/';
+                else if (role === 'student') window.location.href = '/books/';
+            }
+
+            const loginForm = document.getElementById('login-form');
+            const alertBox = document.getElementById('login-alert');
+
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                alertBox.style.display = 'none';
+
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+
+                try {
+                    const resp = await fetch('/api/token/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+
+                    if (!resp.ok) {
+                        throw new Error('Invalid username or password.');
+                    }
+
+                    const data = await resp.json();
+                    sessionStorage.setItem('access_token', data.access);
+                    sessionStorage.setItem('refresh_token', data.refresh);
+
+                    // Check role and redirect
+                    const role = await checkAndStoreUserRole();
+                    if (role === 'admin') {
+                        window.location.href = '/admin-dashboard/';
+                    } else {
+                        window.location.href = '/books/';
+                    }
+                } catch (err) {
+                    showToast(err.message || 'Login failed.', 'error');
+                }
+            });
+        });
+
+        function togglePassword(id, btn) {
+            const input = document.getElementById(id);
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = 'HIDE';
+            } else {
+                input.type = 'password';
+                btn.textContent = 'SHOW';
+            }
+        }
+    </script>
+</body>
+
+</html>

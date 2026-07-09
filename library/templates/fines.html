@@ -1,0 +1,210 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Fines - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=8"></script>
+    <script src="{% static 'js/auth.js' %}?v=8"></script>
+    <style>
+        .fine-status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-unpaid {
+            background: #fef2f2;
+            color: #ef4444;
+        }
+
+        .status-paid {
+            background: #f0fdf4;
+            color: #22c55e;
+        }
+
+        .fine-card {
+            border-left: 4px solid transparent;
+            transition: transform 0.2s;
+        }
+
+        .fine-card.unpaid {
+            border-left-color: #ef4444;
+        }
+
+        .fine-card.paid {
+            border-left-color: #22c55e;
+        }
+
+        .fine-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .fine-amount {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            border: 2px dashed var(--border);
+        }
+    </style>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions" style="margin-bottom: 2rem;">
+            <div>
+                <h1>My Fines</h1>
+                <p style="color: var(--text-muted);">Track your late fees and payment history.</p>
+            </div>
+            <div id="total-outstanding" class="fine-amount" style="color: #ef4444; display: none;">
+                Total Due: ₹0.00
+            </div>
+        </div>
+
+        <div id="fines-grid"
+            style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+            <!-- Fines will be injected here -->
+            <div style="grid-column: 1/-1; text-align: center; padding: 2rem;">
+                <div class="spinner"></div>
+                <p>Loading your fines...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Success Modal -->
+    <div id="success-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div style="font-size: 3rem; color: #22c55e; margin-bottom: 1rem;">✓</div>
+            <h2>Payment Successful</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Your fine has been cleared. Thank you!</p>
+            <button class="btn btn-primary" style="width: 100%;" onclick="closeSuccessModal()">Great!</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadFines);
+
+        async function loadFines() {
+            const grid = document.getElementById('fines-grid');
+            const totalDueDiv = document.getElementById('total-outstanding');
+
+            try {
+                // Fetch issues for current student
+                const response = await fetchAPI('issues/');
+
+                // Handle pagination if results are wrapped in { results: [] }
+                const issues = Array.isArray(response) ? response : (response.results || []);
+
+                // Filter for issues that have fines
+                const fineIssues = issues.filter(i => parseFloat(i.fine_amount) > 0);
+
+                if (fineIssues.length === 0) {
+                    grid.innerHTML = `
+                        <div class="empty-state" style="grid-column: 1/-1;">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">📚</div>
+                            <h3>All Clear!</h3>
+                            <p>You don't have any outstanding or past fines. Keep it up!</p>
+                        </div>
+                    `;
+                    totalDueDiv.style.display = 'none';
+                    return;
+                }
+
+                // Calculate total outstanding
+                const totalUnpaid = fineIssues
+                    .filter(i => i.fine_status === 'UNPAID')
+                    .reduce((sum, i) => sum + parseFloat(i.fine_amount), 0);
+
+                if (totalUnpaid > 0) {
+                    totalDueDiv.textContent = `Total Due: ₹${totalUnpaid.toFixed(2)}`;
+                    totalDueDiv.style.display = 'block';
+                } else {
+                    totalDueDiv.style.display = 'none';
+                }
+
+                grid.innerHTML = fineIssues.map(issue => `
+                    <div class="card fine-card ${issue.fine_status.toLowerCase()}" style="padding: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                            <div>
+                                <h3 style="margin-bottom: 0.25rem;">${issue.book_title}</h3>
+                                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                                    Issued: ${new Date(issue.issue_date).toLocaleDateString()}
+                                </div>
+                            </div>
+                            <span class="fine-status-badge status-${issue.fine_status.toLowerCase()}">
+                                ${issue.fine_status}
+                            </span>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                            <div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Fine Amount</div>
+                                <div class="fine-amount">₹${issue.fine_amount}</div>
+                            </div>
+                            ${issue.fine_status === 'UNPAID' ? `
+                                <button class="btn btn-primary" onclick="payFine(${issue.id})">
+                                    Pay Now
+                                </button>
+                            ` : `
+                                <div style="text-align: right;">
+                                    <div style="font-size: 0.75rem; color: var(--text-muted);">Paid on</div>
+                                    <div style="font-weight: 500;">${new Date(issue.paid_at).toLocaleDateString()}</div>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error("Failed to load fines", error);
+                grid.innerHTML = '<div class="alert alert-error">Failed to load fines. Please try again.</div>';
+            }
+        }
+
+        async function payFine(id) {
+            try {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = 'Processing...';
+
+                const response = await fetchAPI(`issues/${id}/pay/`, {
+                    method: 'POST'
+                });
+
+                showSuccessModal();
+                loadFines(); // Refresh list
+            } catch (error) {
+                console.error("Payment failed", error);
+                showToast(error.message || "Payment failed. Please try again.", "error");
+                event.target.disabled = false;
+                event.target.textContent = 'Pay Now';
+            }
+        }
+
+        function showSuccessModal() {
+            document.getElementById('success-modal').classList.add('open');
+        }
+
+        function closeSuccessModal() {
+            document.getElementById('success-modal').classList.remove('open');
+        }
+    </script>
+</body>
+
+</html>

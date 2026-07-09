@@ -1,0 +1,160 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions"
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <h1>My Profile</h1>
+            <button id="profile-edit-trigger" class="btn btn-outline"
+                style="display: flex; align-items: center; gap: 0.5rem;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                Edit Profile
+            </button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 340px; gap: 2rem; align-items: start;">
+            <!-- User Info Card -->
+            <div class="card">
+                <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem;">
+                    <div
+                        style="width: 80px; height: 80px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold;">
+                        <span id="name-initial">?</span>
+                    </div>
+                    <div>
+                        <h2 id="profile-name" style="margin-bottom: 0.25rem;">Loading...</h2>
+                        <span id="profile-role" class="badge badge-neutral">STUDENT</span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <p id="profile-username" style="font-weight: 500;">-</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Roll Number</label>
+                        <p id="profile-roll" style="font-weight: 500;">-</p>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label class="form-label">Email Address</label>
+                        <p id="profile-email" style="font-weight: 500;">-</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Department</label>
+                        <p id="profile-dept" style="font-weight: 500;">-</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Joining Year</label>
+                        <p id="profile-year" style="font-weight: 500;">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login Barcode Card -->
+            <div class="card" style="text-align: center;">
+                <h3>Login Barcode</h3>
+                <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Use this barcode to
+                    login instantly at any library kiosk.</p>
+
+                <div id="qr-container"
+                    style="background: white; padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 1.5rem; min-height: 120px; display: flex; align-items: center; justify-content: center;">
+                    <img id="profile-qr" src="" alt="Login Barcode"
+                        style="max-width: 100%; height: auto; display: none;">
+                    <div id="qr-loading" style="color: var(--text-muted);">Loading Barcode...</div>
+                </div>
+
+                <a id="download-qr" href="" download="my-id-barcode.png" class="btn btn-primary"
+                    style="width: 100%; display: none; align-items: center; justify-content: center; gap: 0.5rem; text-decoration: none;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download Barcode
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadProfileData() {
+            try {
+                const user = await fetchAPI('students/me/');
+
+                // Set text fields
+                document.getElementById('profile-name').textContent = user.name;
+                document.getElementById('profile-role').textContent = user.role;
+                document.getElementById('profile-username').textContent = user.username || '-';
+                document.getElementById('profile-roll').textContent = user.roll_no;
+                document.getElementById('profile-email').textContent = user.email;
+                document.getElementById('profile-dept').textContent = user.department;
+                document.getElementById('profile-year').textContent = user.year || '-';
+
+                document.getElementById('name-initial').textContent = user.name.charAt(0).toUpperCase();
+
+                // Set QR Image
+                const qrImg = document.getElementById('profile-qr');
+                const qrLoading = document.getElementById('qr-loading');
+                const downloadBtn = document.getElementById('download-qr');
+
+                if (user.qr_image) {
+                    qrImg.src = user.qr_image;
+                    qrImg.style.display = 'block';
+                    qrLoading.style.display = 'none';
+                    downloadBtn.href = user.qr_image;
+                    downloadBtn.style.display = 'flex';
+                } else {
+                    qrLoading.textContent = 'No QR Code generated yet.';
+                }
+
+            } catch (err) {
+                console.error("Profile error:", err);
+                showToast('Failed to load profile details.', 'error');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            loadProfileData();
+
+            // Handle Edit Button click
+            const editBtn = document.getElementById('profile-edit-trigger');
+            editBtn.addEventListener('click', () => {
+                const navEditBtn = document.getElementById('open-edit-profile-btn');
+                if (navEditBtn) {
+                    navEditBtn.click();
+                } else {
+                    // Fallback if nav button not found for some reason
+                    showToast('Edit feature unavailable.', 'error');
+                }
+            });
+
+            // Listen for updates from the modal in nav.html
+            window.addEventListener('profileUpdated', (e) => {
+                console.log("Profile updated event received:", e.detail);
+                loadProfileData(); // Reload page content
+            });
+        });
+    </script>
+</body>
+
+</html>

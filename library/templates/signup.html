@@ -1,0 +1,191 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+    <style>
+        .select-custom {
+            cursor: pointer;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container" style="display:flex; justify-content:center; width:100%;">
+        <div class="auth-card" style="margin-top: 2rem;">
+            <div class="auth-header">
+                <h1>Create an Account</h1>
+                <p>Join LibrarySaaS today</p>
+            </div>
+            <div id="signup-alert" class="alert"></div>
+            <form id="signup-form">
+                <div class="form-group">
+                    <label class="form-label" for="username">Username</label>
+                    <input type="text" id="username" class="form-control" required placeholder="Choose a username">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input type="email" id="email" class="form-control" required placeholder="Enter your email">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <div style="position:relative;">
+                        <input type="password" id="password" class="form-control" required
+                            placeholder="Create a strong password">
+                        <button type="button" onclick="togglePassword('password', this)"
+                            style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); font-size: 0.75rem; font-weight: 600; cursor:pointer;">SHOW</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="name">Full Name</label>
+                    <input type="text" id="name" class="form-control" required placeholder="Enter your full name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="roll_no">Roll Number</label>
+                    <input type="text" id="roll_no" class="form-control" required placeholder="e.g. STU001">
+                </div>
+
+                <div style="display:flex; gap:1rem;">
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label" for="department">Department</label>
+                        <select id="department" class="form-control select-custom" required>
+                            <option value="">Select Dept</option>
+                            <option value="CSE">CSE</option>
+                            <option value="ECE">ECE</option>
+                            <option value="MECH">MECH</option>
+                            <option value="CIVIL">CIVIL</option>
+                            <option value="IT">IT</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label" for="year">Year (Optional)</label>
+                        <input type="number" id="year" class="form-control" placeholder="e.g. 1, 2, 3..." min="1"
+                            max="4">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="phone">Phone Number (Optional)</label>
+                    <input type="tel" id="phone" class="form-control" placeholder="Enter contact number">
+                </div>
+                <button type="submit" class="btn btn-primary"
+                    style="width: 100%; margin-top: 1rem; padding: 0.75rem;">Sign Up</button>
+            </form>
+
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <span style="color: var(--text-muted);">Already have an account?</span>
+                <a href="/" style="color: var(--primary); font-weight: 600; text-decoration: none;">Sign in here</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Redirect if already logged in
+            if (isAuthenticated()) {
+                const role = getUserRole();
+                if (role === 'admin') window.location.href = '/admin-dashboard/';
+                else if (role === 'student') window.location.href = '/books/';
+            }
+
+            const signupForm = document.getElementById('signup-form');
+            const alertBox = document.getElementById('signup-alert');
+
+            signupForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                alertBox.style.display = 'none';
+
+                const username = document.getElementById('username').value;
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const name = document.getElementById('name').value;
+                const roll_no = document.getElementById('roll_no').value;
+                const department = document.getElementById('department').value;
+
+                // Optional fields
+                const yearRaw = document.getElementById('year').value;
+                const phone = document.getElementById('phone').value;
+
+                const payload = { username, email, password, name, roll_no, department };
+                if (yearRaw) payload.year = parseInt(yearRaw);
+                if (phone) payload.phone = phone;
+
+                try {
+                    // Register the student
+                    const resp = await fetch('/api/signup/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!resp.ok) {
+                        const errData = await resp.json();
+                        let errorMsg = errData.detail || 'Registration failed.';
+                        // Capture Django standard validation errors if present
+                        if (!errData.detail) {
+                            const errors = [];
+                            for (const [key, value] of Object.entries(errData)) {
+                                errors.push(`${key}: ${Array.isArray(value) ? value.join(', ') : value}`);
+                            }
+                            if (errors.length > 0) errorMsg = errors.join('<br>');
+                        }
+                        throw new Error(errorMsg);
+                    }
+
+                    // On success, auto-login
+                    const loginResp = await fetch('/api/token/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+
+                    if (loginResp.ok) {
+                        const data = await loginResp.json();
+                        sessionStorage.setItem('access_token', data.access);
+                        sessionStorage.setItem('refresh_token', data.refresh);
+
+                        // It's a student account we just created
+                        sessionStorage.setItem('user_role', 'student');
+                        window.location.href = '/books/';
+                    } else {
+                        // If auto-login fails for some reason
+                        alertBox.innerHTML = 'Account created successfully! Please <a href="/">sign in</a>.';
+                        alertBox.className = 'alert alert-success';
+                        alertBox.style.display = 'block';
+                        signupForm.reset();
+                    }
+
+                } catch (err) {
+                    showToast(err.message || 'Registration failed.', 'error');
+                }
+            });
+        });
+
+        function togglePassword(id, btn) {
+            const input = document.getElementById(id);
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = 'HIDE';
+            } else {
+                input.type = 'password';
+                btn.textContent = 'SHOW';
+            }
+        }
+    </script>
+</body>
+
+</html>

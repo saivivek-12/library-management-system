@@ -1,0 +1,91 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Logs - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+    <div class="page-container">
+        <div class="page-actions">
+            <h1>Audit Logs</h1>
+            <input type="text" id="action-filter" class="form-control" placeholder="Filter by action..."
+                style="width: 250px;">
+        </div>
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table" id="logs-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Timestamp</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Target</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Logs injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('admin');
+            const tbody = document.querySelector('#logs-table tbody');
+            const filterInput = document.getElementById('action-filter');
+
+            async function loadLogs(actionFilter = "") {
+                try {
+                    let url = 'audit-logs/';
+                    if (actionFilter) {
+                        url += `?action=${encodeURIComponent(actionFilter)}`;
+                    }
+                    const data = await fetchAPI(url);
+                    const logs = data.results || data;
+                    if (logs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No logs found.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = logs.map(log => `
+                        <tr>
+                            <td>#${log.id}</td>
+                            <td>${new Date(log.timestamp).toLocaleString()}</td>
+                            <td>${log.user_name}</td>
+                            <td><span class="badge badge-pending">${log.action}</span></td>
+                            <td>${log.target_model || '-'} #${log.target_id || '-'}</td>
+                            <td>${log.description}</td>
+                        </tr>
+                    `).join('');
+                } catch (err) {
+                    console.error("Failed to load audit logs", err);
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:red;">Failed to load logs.</td></tr>';
+                }
+            }
+
+            let debounceTimer;
+            filterInput.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    loadLogs(filterInput.value);
+                }, 300);
+            });
+
+            loadLogs();
+        });
+    </script>
+</body>
+
+</html>

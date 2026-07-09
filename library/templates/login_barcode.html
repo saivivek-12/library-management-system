@@ -1,0 +1,305 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Card Login - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+
+    <!-- Using Tesseract.js for OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+
+    <style>
+        .scan-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 20px auto;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            background: #000;
+        }
+
+        #camera-view {
+            width: 100%;
+            display: block;
+        }
+
+        .scan-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 2px solid rgba(99, 102, 241, 0.5);
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .scan-frame {
+            width: 80%;
+            height: 30%;
+            border: 3px solid #6366f1;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
+            animation: pulse-frame 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-frame {
+
+            0%,
+            100% {
+                border-color: #6366f1;
+                opacity: 1;
+            }
+
+            50% {
+                border-color: #818cf8;
+                opacity: 0.7;
+            }
+        }
+
+        .scan-label {
+            position: absolute;
+            bottom: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #6366f1;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .status-message {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            min-height: 60px;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .status-idle {
+            color: var(--text-muted);
+        }
+
+        .status-loading {
+            color: var(--primary);
+        }
+
+        .status-success {
+            color: var(--success);
+            background: #ecfdf5;
+        }
+
+        .status-error {
+            color: var(--danger);
+            background: #fef2f2;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-top: 2rem;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container" style="max-width: 600px; margin: 0 auto; padding: 2rem 1rem;">
+        <div class="auth-card" style="padding: 2.5rem;">
+            <div class="auth-header" style="text-align: center; margin-bottom: 2rem;">
+                <h1 style="font-size: 1.75rem; color: #1e293b;">Student ID Card Login</h1>
+                <p style="color: #64748b; margin-top: 0.5rem;">Point your camera at the front of your ID to read your
+                    name</p>
+            </div>
+
+            <div class="scan-container">
+                <video id="camera-view" autoplay playsinline muted></video>
+                <div class="scan-overlay">
+                    <div class="scan-frame" id="frame">
+                        <span class="scan-label" id="scan-btn">Align Name Here</span>
+                    </div>
+                </div>
+            </div>
+
+            <canvas id="canvas" style="display:none;"></canvas>
+
+            <div id="status" class="status-message status-idle">
+                Initializing Scanner... Please wait.
+            </div>
+
+            <div style="text-align: center;">
+                <a href="/" class="back-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                    Back to Password Login
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('camera-view');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const frame = document.getElementById('frame');
+
+        let localStream;
+        let worker;
+        let isProcessing = false;
+        let scanInterval;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Initialize Tesseract worker early
+                worker = await Tesseract.createWorker('eng', 1, {
+                    logger: m => console.log(m)
+                });
+
+                await startCamera();
+                updateStatus("Scanner ready. Show your ID card.", "status-loading");
+
+                // Start continuous scanning
+                scanInterval = setInterval(captureAndScan, 2000); // scan every 2 seconds
+            } catch (err) {
+                updateStatus(`❌ Initialization failed: ${err.message}`, "status-error");
+                console.error(err);
+            }
+        });
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+                localStream = stream;
+                video.srcObject = stream;
+
+                // Set canvas dimensions once video metadata loads
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                };
+            } catch (err) {
+                updateStatus("❌ Camera access denied or not available.", "status-error");
+                throw err;
+            }
+        }
+
+        function stopCamera() {
+            if (scanInterval) clearInterval(scanInterval);
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        async function captureAndScan() {
+            if (isProcessing || video.videoWidth === 0) return;
+            isProcessing = true;
+
+            // Draw current video frame to canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            frame.style.borderColor = '#10b981'; // Green to indicate scanning
+
+            try {
+                // Run OCR on the canvas
+                const { data: { text } } = await worker.recognize(canvas);
+                console.log("OCR Detected Text:", text);
+
+                if (text.trim().length > 3) {
+                    // Show what was detected briefly
+                    updateStatus(`Detected: "${text.substring(0, 30).replace(/\n/g, ' ')}..."`, "status-idle");
+
+                    // Send to backend NameLoginView
+                    const response = await fetch('/api/name-login/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: text })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        updateStatus(`Welcome, ${data.user.name}! Redirecting... 🎉`, "status-success");
+
+                        // Store tokens required for checkAndStoreUserRole
+                        sessionStorage.setItem('access_token', data.access);
+                        sessionStorage.setItem('refresh_token', data.refresh);
+
+                        // Use the secure auth.js method to verify token and get role in correct case
+                        const role = await checkAndStoreUserRole();
+
+                        setTimeout(() => {
+                            if (role === 'admin') {
+                                window.location.href = '/admin-dashboard/';
+                            } else {
+                                window.location.href = '/books/';
+                            }
+                        }, 1000);
+
+                        // Try to gently stop the camera stream in background
+                        try { stopCamera(); } catch (e) { }
+                        return; // Stop the scanning loop
+                    } else {
+                        // Show why it failed to login
+                        if (data.detail) {
+                            updateStatus(`❌ ${data.detail}`, "status-error");
+                            console.log("Login Failed:", data.detail);
+
+                            // Keep error visible for 3 seconds before allowing next scan
+                            setTimeout(() => {
+                                if (!isProcessing) {
+                                    updateStatus("Scanner ready. Show your ID card.", "status-idle");
+                                }
+                            }, 3000);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("OCR/API Warning:", err);
+                // Not a fatal error, just typical OCR noise or mismatch. Keep scanning.
+            }
+
+            frame.style.borderColor = '#6366f1'; // Reset
+            isProcessing = false;
+        }
+
+        function updateStatus(message, className) {
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${className}`;
+        }
+    </script>
+</body>
+
+</html>

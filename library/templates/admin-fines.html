@@ -1,0 +1,225 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Fines & Returns - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions"
+            style="margin-bottom: 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+            <h1>Unpaid Fines & Returns</h1>
+
+            <div style="display:flex; gap:1rem; align-items:center;">
+                <!-- Reusing API token for protected CSV download via JS blob or direct param if public allowed. Using programmatic explicit download -->
+                <button class="btn btn-outline" onclick="downloadCSV()">Export CSV</button>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Issue ID</th>
+                        <th>Student Roll</th>
+                        <th>Book</th>
+                        <th>Due Date</th>
+                        <th>Fine Amount</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-fines-tbody">
+                    <!-- Rows injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit Due Date Modal -->
+    <div id="edit-due-date-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Edit Due Date</h2>
+                <button class="btn btn-outline" style="border:none;" onclick="closeEditDueDateModal()">&times;</button>
+            </div>
+            <div style="margin-bottom: 1.5rem;">
+                <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 0.5rem;">Select a new due date
+                    for this issue.</p>
+                <input type="date" id="edit-due-date" class="form-control" style="width: 100%;">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+                <button class="btn btn-outline" onclick="closeEditDueDateModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitDueDate()">Save Date</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('admin');
+
+            await loadFines();
+        });
+
+        async function loadFines() {
+            const tbody = document.getElementById('admin-fines-tbody');
+            const pageTitle = document.querySelector('h1');
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const isOverdue = urlParams.get('filter') === 'overdue';
+
+            // Set dynamic title
+            if (isOverdue) {
+                pageTitle.textContent = "Overdue Books & Fines";
+            } else if (window.location.search.includes('is_returned=false')) {
+                pageTitle.textContent = "Active Issues";
+            }
+
+            try {
+                // If filtering for overdue specifically, use the main issues endpoint with our new filter
+                // Otherwise use the existing report endpoint for unpaid fines
+                let endpoint = 'reports/unpaid-fines/';
+                if (isOverdue) {
+                    endpoint = 'issues/?overdue=true';
+                } else if (window.location.search.includes('is_returned=false')) {
+                    endpoint = 'issues/?is_returned=false';
+                }
+
+                const data = await fetchAPI(endpoint);
+                const issues = data.results || data;
+
+                if (issues.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = issues.map(i => {
+                    const isOverdueItem = new Date(i.due_date) < new Date() && !i.is_returned;
+                    const FineBadge = i.fine_amount > 0 ? `<span class="badge badge-pending">Unpaid</span>` : `<span class="badge-neutral" style="padding:0.2rem 0.5rem; border-radius:4px; font-size:0.75rem;">On Time</span>`;
+
+                    return `
+                        <tr>
+                            <td style="color:var(--text-muted);">#${i.id}</td>
+                            <td><div style="font-weight:600;">${i.student_name}</div></td>
+                            <td><div style="color:var(--primary); font-weight:500;">${i.book_title}</div></td>
+                            <td>${i.due_date}</td>
+                            <td style="color:var(--danger); font-weight:bold;">₹${i.fine_amount}</td>
+                            <td>${FineBadge}</td>
+                            <td>
+                                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                    ${!i.is_returned ? `<button class="btn btn-outline" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="processReturn(${i.id})">Mark Returned</button>` : ``}
+                                    ${!i.is_returned ? `<button class="btn btn-outline" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="openEditDueDateModal(${i.id}, '${i.due_date}')">Edit Due Date</button>` : `<span style="font-size:0.75rem; color:var(--text-muted); display:flex; align-items:center;">Returned</span>`}
+                                    <button class="btn btn-success" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="processFinePaid(${i.id})">Mark Paid</button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Failed to load fines", err);
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error loading fines.</td></tr>`;
+                showToast('Failed to load unpaid fines', 'error');
+            }
+        }
+
+        window.processReturn = async function (issueId) {
+            if (!confirm("Are you sure you want to mark this book as returned? This will halt any further fine calculations.")) return;
+            try {
+                await fetchAPI(`issues/${issueId}/return_book/`, { method: 'POST' });
+                showToast('Book marked as returned successfully!', 'success');
+                loadFines();
+            } catch (err) {
+                showToast(err.data?.detail || 'Failed to return book.', 'error');
+            }
+        }
+
+        window.processFinePaid = async function (issueId) {
+            if (!confirm("Are you sure you want to mark this fine as PAID?")) return;
+            try {
+                await fetchAPI(`issues/${issueId}/mark-fine-paid/`, { method: 'POST' });
+                showToast('Fine successfully marked as paid!', 'success');
+                loadFines();
+            } catch (err) {
+                showToast(err.data?.detail || 'Failed to mark fine as paid.', 'error');
+            }
+        }
+
+        window.downloadCSV = async function () {
+            try {
+                const token = sessionStorage.getItem('access_token');
+                const response = await fetch('/api/reports/unpaid-fines/export_csv/', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error("Failed to export CSV");
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'unpaid_fines.csv';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } catch (e) {
+                showToast('Failed to generate CSV export.', 'error');
+            }
+        }
+
+        // Edit Due Date Logic
+        let currentEditIssueId = null;
+
+        window.openEditDueDateModal = function (id, currentDueDate) {
+            currentEditIssueId = id;
+            document.getElementById('edit-due-date').value = currentDueDate;
+            document.getElementById('edit-due-date-modal').classList.add('open');
+        }
+
+        window.closeEditDueDateModal = function () {
+            document.getElementById('edit-due-date-modal').classList.remove('open');
+            currentEditIssueId = null;
+        }
+
+        window.submitDueDate = async function () {
+            if (!currentEditIssueId) return;
+            const newDate = document.getElementById('edit-due-date').value;
+            if (!newDate) {
+                showToast("Please select a valid date.", "warning");
+                return;
+            }
+
+            showLoader();
+            try {
+                await fetchAPI(`issues/${currentEditIssueId}/edit_due_date/`, {
+                    method: 'POST',
+                    body: JSON.stringify({ due_date: newDate })
+                });
+
+                showToast("Due date updated successfully.", "success");
+                closeEditDueDateModal();
+                loadFines();
+            } catch (err) {
+                showToast(err.data?.detail || "Failed to edit due date.", "error");
+            } finally {
+                hideLoader();
+            }
+        }
+    </script>
+</body>
+
+</html>

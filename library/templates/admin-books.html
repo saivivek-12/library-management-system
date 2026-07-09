@@ -1,0 +1,570 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Books - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=8"></script>
+    <script src="{% static 'js/auth.js' %}?v=8"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions"
+            style="margin-bottom: 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+            <h1>Manage Books Inventory</h1>
+            <div style="display:flex; gap:1rem; align-items:center;">
+                <input type="text" id="search-input" class="form-control" placeholder="Search by title or author..."
+                    style="width: 250px;">
+                <button class="btn btn-primary" onclick="openAddBookModal()">+ Add New Book</button>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Title</th>
+                        <th>Author</th>
+                        <th>Category</th>
+                        <th>Total Copies</th>
+                        <th>Available Copies</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-books-tbody">
+                    <!-- Books injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="restock-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Restock Book</h2>
+                <button class="btn btn-outline" style="border:none;" onclick="closeRestockModal()">&times;</button>
+            </div>
+            <p id="restock-book-title" style="color:var(--primary); margin-bottom:1rem; font-weight:500;"></p>
+            <div class="form-group">
+                <label class="form-label" for="restock-qty">Quantity to Add</label>
+                <input type="number" id="restock-qty" class="form-control" min="1" value="1">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:2rem;">
+                <button class="btn btn-outline" onclick="closeRestockModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitRestock()">Confirm Restock</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Book Modal -->
+    <div id="add-book-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Add New Book</h2>
+                <button class="btn btn-outline" style="border:none;" onclick="closeAddBookModal()">&times;</button>
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Book Title</label>
+                <input type="text" id="add-title" class="form-control" placeholder="E.g. The Great Gatsby">
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Author Name</label>
+                <input type="text" id="add-author" class="form-control" placeholder="E.g. F. Scott Fitzgerald">
+            </div>
+            <div style="display:flex; gap:1rem; margin-bottom:1rem;">
+                <div class="form-group" style="flex:1;">
+                    <label class="form-label">Category</label>
+                    <input type="text" id="add-category" class="form-control" placeholder="E.g. Fiction">
+                </div>
+                <div class="form-group" style="width: 120px;">
+                    <label class="form-label">Initial Copies</label>
+                    <input type="number" id="add-copies" class="form-control" min="1" value="1">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Cover Image</label>
+                <input type="file" id="add-cover" class="form-control" accept="image/*">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.5rem;">
+                <button class="btn btn-outline" onclick="closeAddBookModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAddBook()">Add Book</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Book Modal -->
+    <div id="edit-book-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Edit Book</h2>
+                <button class="btn btn-outline" style="border:none;" onclick="closeEditBookModal()">&times;</button>
+            </div>
+            <input type="hidden" id="edit-id">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Book Title</label>
+                <input type="text" id="edit-title" class="form-control">
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Author Name</label>
+                <input type="text" id="edit-author" class="form-control">
+            </div>
+            <div style="display:flex; gap:1rem; margin-bottom:1rem;">
+                <div class="form-group" style="flex:1;">
+                    <label class="form-label">Category</label>
+                    <input type="text" id="edit-category" class="form-control">
+                </div>
+                <div class="form-group" style="width: 120px;">
+                    <label class="form-label">Total Copies</label>
+                    <input type="number" id="edit-copies" class="form-control" min="0">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Upload New Cover Image (Optional)</label>
+                <input type="file" id="edit-cover" class="form-control" accept="image/*">
+                <small style="color:var(--text-muted); display:block; margin-top:0.25rem;">Leave empty to keep current
+                    cover.</small>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.5rem;">
+                <button class="btn btn-outline" onclick="closeEditBookModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitEditBook()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Book Details Modal -->
+    <div id="book-details-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Book Details</h2>
+                <button class="btn btn-outline" style="border:none;" onclick="closeBookDetailsModal()">&times;</button>
+            </div>
+            <div
+                style="display:grid; grid-template-columns: 100px 1fr; gap:1.5rem; margin-top:1rem; margin-bottom:1.5rem;">
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:flex-start;">
+                    <img id="detail-cover" src="" alt="Book Cover"
+                        style="width:100px; height:150px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display:none; background-color:#f1f5f9;">
+                    <div id="detail-cover-placeholder"
+                        style="width:100px; height:150px; border-radius:8px; border:1px solid var(--border); background-color:#f1f5f9; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.75rem; text-align:center; padding:0.5rem;">
+                        No Cover Image</div>
+                </div>
+                <div style="display:grid; gap:0.75rem;">
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">ID:</strong>
+                        <span id="detail-id"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Title:</strong>
+                        <span id="detail-title" style="font-weight:600; color:var(--primary);"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Author:</strong>
+                        <span id="detail-author"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Category:</strong>
+                        <span id="detail-category" class="badge badge-neutral"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Total
+                            Copies:</strong>
+                        <span id="detail-total"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Available
+                            Copies:</strong>
+                        <span id="detail-available"></span>
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeBookDetailsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Book Copies / Barcodes Modal -->
+    <div id="book-copies-modal" class="modal">
+        <div class="modal-content" style="max-width: 650px;">
+            <div class="modal-header">
+                <h2>Barcodes - <span id="copies-book-title" style="color:var(--primary);"></span></h2>
+                <div style="display:flex; gap:0.5rem;">
+                    <button class="btn btn-primary" onclick="printQRCodes()">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round"
+                            style="vertical-align:middle; margin-right:4px;">
+                            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                            <rect x="6" y="14" width="12" height="8"></rect>
+                        </svg> Print All
+                    </button>
+                    <button class="btn btn-outline" style="border:none;"
+                        onclick="closeBookCopiesModal()">&times;</button>
+                </div>
+            </div>
+            <div id="copies-list-container"
+                style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; max-height: 60vh; overflow-y: auto; margin-top: 1rem; padding: 1rem; background: var(--neutral-bg); border-radius: var(--radius-md);">
+                <!-- QRs injected here -->
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top: 1.5rem;">
+                <button class="btn btn-outline" onclick="closeBookCopiesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRestockId = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('admin');
+
+            const tbody = document.getElementById('admin-books-tbody');
+            const searchInput = document.getElementById('search-input');
+            let debounceTimer;
+
+            async function loadBooks(search = "") {
+                try {
+                    let url = 'books/';
+                    if (search) url += `?search=${encodeURIComponent(search)}`;
+
+                    const data = await fetchAPI(url);
+                    const books = data.results || data;
+
+                    if (books.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No books found.</td></tr>`;
+                        return;
+                    }
+
+                    tbody.innerHTML = books.map(b => {
+                        const escapedBook = JSON.stringify(b).replace(/"/g, '&quot;');
+                        return `
+                        <tr style="cursor:pointer;" onclick="openBookDetailsModal(${escapedBook})">
+                            <td style="color:var(--text-muted);">#${b.id}</td>
+                            <td><div style="font-weight:600;">${b.title}</div></td>
+                            <td>${b.author_name}</td>
+                            <td><span class="badge badge-neutral">${b.category}</span></td>
+                            <td>${b.total_copies}</td>
+                            <td><span style="color:${b.available_copies === 0 ? 'var(--danger)' : 'var(--success)'}; font-weight:bold;">${b.available_copies}</span></td>
+                            <td>
+                                <div style="display:flex; gap:0.5rem;" onclick="event.stopPropagation();">
+                                    <button class="btn btn-outline" style="padding:0.25rem 0.5rem; font-size:0.75rem; color:#6366f1; border-color:#6366f1;" onclick="openBookCopiesModal(${b.id}, '${b.title.replace(/'/g, "\\'")}')" title="View Barcodes">
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <line x1="3" y1="5" x2="3" y2="19"></line>
+                                            <line x1="7" y1="5" x2="7" y2="19"></line>
+                                            <line x1="11" y1="5" x2="11" y2="19"></line>
+                                            <line x1="15" y1="5" x2="15" y2="19"></line>
+                                            <line x1="19" y1="5" x2="19" y2="19"></line>
+                                        </svg>
+                                    </button>
+                                    <button class="btn btn-primary" style="padding:0.25rem 0.75rem; font-size:0.75rem;" onclick="openRestockModal(${b.id}, '${b.title.replace(/'/g, "\\'")}')">Restock</button>
+                                    <button class="btn btn-outline" style="padding:0.25rem 0.75rem; font-size:0.75rem; color:var(--primary); border-color:var(--primary);" onclick='openEditBookModal(${escapedBook})'>Edit</button>
+                                    <button class="btn btn-outline" style="padding:0.25rem 0.75rem; font-size:0.75rem; color:var(--danger); border-color:var(--danger);" onclick="deleteBook(${b.id}, '${b.title.replace(/'/g, "\\'")}')">Remove</button>
+                                </div>
+                            </td>
+                        </tr>
+                        `;
+                    }).join('');
+                } catch (err) {
+                    console.error("Failed to load books", err);
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error loading books.</td></tr>`;
+                }
+            }
+
+            window.openRestockModal = function (id, title) {
+                currentRestockId = id;
+                document.getElementById('restock-book-title').textContent = title;
+                document.getElementById('restock-qty').value = 1;
+                document.getElementById('restock-modal').classList.add('open');
+            }
+
+            window.closeRestockModal = function () {
+                document.getElementById('restock-modal').classList.remove('open');
+                currentRestockId = null;
+            }
+
+            window.submitRestock = async function () {
+                if (!currentRestockId) return;
+                const qty = parseInt(document.getElementById('restock-qty').value);
+                if (isNaN(qty) || qty <= 0) {
+                    showToast('Please enter a valid positive quantity.', 'error');
+                    return;
+                }
+
+                try {
+                    const resp = await fetchAPI(`books/${currentRestockId}/restock/`, {
+                        method: 'POST',
+                        body: JSON.stringify({ qty })
+                    });
+
+                    showToast(resp.detail || `Restock successful!`, 'success');
+                    closeRestockModal();
+                    loadBooks(searchInput.value);
+                } catch (err) {
+                    showToast(err.data?.detail || 'Failed to restock book.', 'error');
+                }
+            }
+
+            window.deleteBook = async function (id, title) {
+                if (!confirm(`Are you sure you want to completely remove the book '${title}' from the catalog? This action cannot be undone.`)) return;
+
+                showLoader();
+                try {
+                    await fetchAPI(`books/${id}/remove/`, {
+                        method: 'DELETE'
+                    });
+                    showToast(`Book '${title}' removed successfully.`, 'success');
+                    loadBooks(searchInput.value);
+                } catch (err) {
+                    showToast(err.data?.detail || 'Failed to remove book.', 'error');
+                } finally {
+                    hideLoader();
+                }
+            }
+
+            // --- Book Details Logic ---
+            window.openBookDetailsModal = function (book) {
+                document.getElementById('detail-id').textContent = `#${book.id}`;
+                document.getElementById('detail-title').textContent = book.title;
+                document.getElementById('detail-author').textContent = book.author_name;
+                document.getElementById('detail-category').textContent = book.category;
+                document.getElementById('detail-total').textContent = book.total_copies;
+
+                const availElem = document.getElementById('detail-available');
+                availElem.textContent = book.available_copies;
+                availElem.style.color = book.available_copies === 0 ? 'var(--danger)' : 'var(--success)';
+                availElem.style.fontWeight = 'bold';
+
+                const coverImg = document.getElementById('detail-cover');
+                const coverPlaceholder = document.getElementById('detail-cover-placeholder');
+
+                if (book.cover_image) {
+                    coverImg.src = book.cover_image;
+                    coverImg.style.display = 'block';
+                    coverPlaceholder.style.display = 'none';
+                } else {
+                    coverImg.style.display = 'none';
+                    coverPlaceholder.style.display = 'flex';
+                }
+
+                document.getElementById('book-details-modal').classList.add('open');
+            }
+
+            window.closeBookDetailsModal = function () {
+                document.getElementById('book-details-modal').classList.remove('open');
+            }
+
+            // --- Book Copies / QRs Logic ---
+            window.openBookCopiesModal = async function (id, title) {
+                document.getElementById('copies-book-title').textContent = title;
+                const container = document.getElementById('copies-list-container');
+                container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 2rem;">Loading copies...</div>';
+                document.getElementById('book-copies-modal').classList.add('open');
+
+                try {
+                    const copiesData = await fetchAPI(`book-copies/?book_id=${id}`);
+                    const copies = copiesData.results || copiesData; // handle pagination if any
+
+                    if (!copies || copies.length === 0) {
+                        container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 2rem;">No copies exist for this book yet.</div>';
+                        return;
+                    }
+
+                    container.innerHTML = copies.map(c => `
+                        <div class="qr-card" style="background: white; padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); text-align: center; box-shadow: var(--shadow-sm); display:flex; flex-direction:column; align-items:center;">
+                            ${c.qr_image ? `<img src="${c.qr_image}" alt="Barcode" style="width: 120px; height: 60px; object-fit: contain; margin-bottom: 0.5rem; border: 1px solid #eaeaea; padding: 4px; border-radius: 4px;"/>` : `<div style="width:120px; height:60px; display:flex; align-items:center; justify-content:center; border: 1px solid #eaeaea; color: #ccc; margin-bottom: 0.5rem;">No Image</div>`}
+                            <div style="font-size: 0.65rem; color: var(--text-muted); word-break: break-all; margin-bottom: 0.25rem; font-family: monospace;">${c.copy_uid.split('-')[0]}...${c.copy_uid.split('-')[4]}</div>
+                            <span class="badge ${c.status === 'AVAILABLE' ? 'badge-success' : (c.status === 'ISSUED' ? 'badge-neutral' : 'badge-danger')}" style="font-size: 0.65rem;">${c.status}</span>
+                        </div>
+                    `).join('');
+                } catch (err) {
+                    container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--danger); padding: 2rem;">Error loading book copies.</div>';
+                    console.error(err);
+                }
+            }
+
+            window.closeBookCopiesModal = function () {
+                document.getElementById('book-copies-modal').classList.remove('open');
+            }
+
+            window.printQRCodes = function () {
+                const title = document.getElementById('copies-book-title').textContent;
+                const container = document.getElementById('copies-list-container');
+
+                if (container.innerHTML.includes('No copies exist') || container.innerHTML.includes('Loading')) {
+                    showToast('Nothing to print', 'warning');
+                    return;
+                }
+
+                const printWindow = window.open('', '_blank', 'width=800,height=600');
+
+                let cardsHtml = '';
+                const cards = container.querySelectorAll('.qr-card');
+                cards.forEach(card => {
+                    const imgEl = card.querySelector('img');
+                    const imgUrl = imgEl ? imgEl.src : '';
+                    const uidEl = card.querySelector('div:nth-of-type(1)');
+                    const uidTxt = uidEl ? uidEl.innerText : '';
+
+                    const imgHtml = imgUrl ? '<img src="' + imgUrl + '" />' : 'No QR';
+                    cardsHtml += '<div class="card">' + imgHtml + '<div class="uid">ID: ' + uidTxt + '</div></div>';
+                });
+
+                const htmlContent = `
+                    <!DOCTYPE html>
+                    <html>
+                        <head>
+                            <title>Print Barcodes - ${title}</title>
+                            <style>
+                                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 20px; }
+                                .header { margin-bottom: 30px; }
+                                .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+                                .card { border: 1px dashed #ccc; padding: 15px; border-radius: 8px; width: 160px; text-align: center; page-break-inside: avoid; }
+                                .card img { width: 140px; height: 70px; margin-bottom: 8px; }
+                                .uid { font-size: 9px; color: #555; word-break: break-all; font-family: monospace; }
+                                .status { display: none; }
+                                @media print {
+                                    button { display: none !important; }
+                                    .header { margin-bottom: 20px; }
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <h2>Library Inventory Tags</h2>
+                                <h3>${title}</h3>
+                                <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 4px;">Print Labels</button>
+                            </div>
+                            <div class="grid">
+                                ${cardsHtml}
+                            </div>
+                            <scr` + `ipt>
+                                setTimeout(() => { window.print(); }, 500);
+                            </scr` + `ipt>
+                        </body>
+                    </html>
+                `;
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+            }
+
+            searchInput.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    loadBooks(searchInput.value);
+                }, 300);
+            });
+
+            // --- Add Book Logic ---
+            window.openAddBookModal = function () {
+                document.getElementById('add-title').value = '';
+                document.getElementById('add-author').value = '';
+                document.getElementById('add-category').value = '';
+                document.getElementById('add-copies').value = 1;
+                document.getElementById('add-cover').value = '';
+                document.getElementById('add-book-modal').classList.add('open');
+            }
+
+            window.closeAddBookModal = function () {
+                document.getElementById('add-book-modal').classList.remove('open');
+            }
+
+            window.submitAddBook = async function () {
+                const title = document.getElementById('add-title').value.trim();
+                const author_name = document.getElementById('add-author').value.trim();
+                const category = document.getElementById('add-category').value.trim();
+                const total_copies = document.getElementById('add-copies').value;
+                const coverInput = document.getElementById('add-cover');
+
+                if (!title || !author_name || !category || !total_copies) {
+                    showToast('Please fill all required fields.', 'warning');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('title', title);
+                formData.append('author_name', author_name);
+                formData.append('category', category);
+                formData.append('total_copies', total_copies);
+
+                if (coverInput.files.length > 0) {
+                    formData.append('cover_image', coverInput.files[0]);
+                }
+
+                showLoader();
+                try {
+                    await fetchAPI('books/', {
+                        method: 'POST',
+                        body: formData // fetchAPI handles FormData without JSON.stringify or manual Content-Type
+                    });
+                    showToast('Book successfully added to the library catalog.', 'success');
+                    closeAddBookModal();
+                    loadBooks(searchInput.value);
+                } catch (err) {
+                    showToast(err.data?.detail || 'Failed to add the book.', 'error');
+                } finally {
+                    hideLoader();
+                }
+            }
+
+            // --- Edit Book Logic ---
+            window.openEditBookModal = function (book) {
+                document.getElementById('edit-id').value = book.id;
+                document.getElementById('edit-title').value = book.title;
+                document.getElementById('edit-author').value = book.author_name;
+                document.getElementById('edit-category').value = book.category;
+                document.getElementById('edit-copies').value = book.total_copies;
+                document.getElementById('edit-cover').value = '';
+                document.getElementById('edit-book-modal').classList.add('open');
+            }
+
+            window.closeEditBookModal = function () {
+                document.getElementById('edit-book-modal').classList.remove('open');
+            }
+
+            window.submitEditBook = async function () {
+                const id = document.getElementById('edit-id').value;
+                const title = document.getElementById('edit-title').value.trim();
+                const author_name = document.getElementById('edit-author').value.trim();
+                const category = document.getElementById('edit-category').value.trim();
+                const total_copies = document.getElementById('edit-copies').value;
+                const coverInput = document.getElementById('edit-cover');
+
+                if (!title || !author_name || !category || !total_copies) {
+                    showToast('Please fill all required text fields.', 'warning');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('title', title);
+                formData.append('author_name', author_name);
+                formData.append('category', category);
+                formData.append('total_copies', total_copies);
+
+                if (coverInput.files.length > 0) {
+                    formData.append('cover_image', coverInput.files[0]);
+                }
+
+                showLoader();
+                try {
+                    await fetchAPI(`books/${id}/`, {
+                        method: 'PATCH',
+                        body: formData
+                    });
+                    showToast('Book details updated successfully.', 'success');
+                    closeEditBookModal();
+                    loadBooks(searchInput.value);
+                } catch (err) {
+                    showToast(err.data?.detail || 'Failed to update the book.', 'error');
+                } finally {
+                    hideLoader();
+                }
+            }
+
+            loadBooks();
+        });
+    </script>
+</body>
+
+</html>

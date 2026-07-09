@@ -1,0 +1,129 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Students - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=7"></script>
+    <script src="{% static 'js/auth.js' %}?v=7"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions"
+            style="margin-bottom: 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+            <h1>Manage Students</h1>
+
+            <!-- Filters -->
+            <div style="display:flex; gap:1rem; align-items:center;">
+                <input type="text" id="search-bar" class="form-control" placeholder="Search name/roll/email..."
+                    style="width:250px;">
+                <select id="filter-dept" class="form-control" style="width:150px; cursor:pointer;">
+                    <option value="">All Depts</option>
+                    <option value="CSE">CSE</option>
+                    <option value="ECE">ECE</option>
+                    <option value="MECH">MECH</option>
+                    <option value="CIVIL">CIVIL</option>
+                    <option value="IT">IT</option>
+                </select>
+                <select id="filter-active" class="form-control" style="width:150px; cursor:pointer;">
+                    <option value="">All Statuses</option>
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Roll No</th>
+                        <th>Department</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-students-tbody">
+                    <!-- Rows injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('admin');
+
+            const tbody = document.getElementById('admin-students-tbody');
+            const searchBar = document.getElementById('search-bar');
+            const filterDept = document.getElementById('filter-dept');
+            const filterActive = document.getElementById('filter-active');
+
+            async function loadStudents() {
+                try {
+                    let url = 'students/?';
+                    if (searchBar.value) url += `search=${encodeURIComponent(searchBar.value)}&`;
+                    if (filterDept.value) url += `department=${filterDept.value}&`;
+                    if (filterActive.value) url += `is_active=${filterActive.value}&`;
+
+                    const data = await fetchAPI(url);
+                    const students = data.results || data;
+
+                    if (students.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No students found.</td></tr>`;
+                        return;
+                    }
+
+                    tbody.innerHTML = students.map(s => {
+                        const statusBadge = s.is_active ?
+                            '<span class="badge badge-approved">Active</span>' :
+                            '<span class="badge badge-rejected">Inactive</span>';
+
+                        return `
+                            <tr style="cursor:pointer;" onclick="window.location.href='/admin-student-detail/?id=${s.id}'">
+                                <td style="color:var(--text-muted);">#${s.id}</td>
+                                <td><div style="font-weight:600; color:var(--primary);">${s.name}</div></td>
+                                <td>${s.roll_no}</td>
+                                <td>${s.department}</td>
+                                <td>${s.email}</td>
+                                <td>${statusBadge}</td>
+                                <td>
+                                    <button class="btn btn-outline" style="padding:0.25rem 0.75rem; font-size:0.75rem;" onclick="event.stopPropagation(); window.location.href='/admin-student-detail/?id=${s.id}'">View Profile</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                } catch (err) {
+                    console.error("Failed to load students", err);
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error loading students.</td></tr>`;
+                    showToast('Failed to load students', 'error');
+                }
+            }
+
+            // Debounced listener for search bar
+            let debounceTimer;
+            searchBar.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(loadStudents, 500);
+            });
+
+            filterDept.addEventListener('change', loadStudents);
+            filterActive.addEventListener('change', loadStudents);
+
+            loadStudents();
+        });
+    </script>
+</body>
+
+</html>

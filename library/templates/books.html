@@ -1,0 +1,384 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Books - Library Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=10">
+    <script src="{% static 'js/api.js' %}?v=8"></script>
+    <script src="{% static 'js/auth.js' %}?v=8"></script>
+</head>
+
+<body>
+    {% include 'nav.html' %}
+
+    <div class="page-container">
+        <div class="page-actions">
+            <h1>Available Books</h1>
+            <div style="display:flex; gap:1rem; align-items:center;">
+                <input type="text" id="search-input" class="form-control" placeholder="Search books..."
+                    style="width: 250px;">
+                <select id="category-filter" class="form-control" style="width: auto;">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="card-grid" id="books-container">
+            <!-- Books will be injected here -->
+        </div>
+    </div>
+
+    <!-- Book Details Modal -->
+    <div id="book-details-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Book Details</h2>
+                <button class="btn btn-outline" style="border:none;" onclick="closeBookDetailsModal()">&times;</button>
+            </div>
+            <div
+                style="display:grid; grid-template-columns: 100px 1fr; gap:1.5rem; margin-top:1rem; margin-bottom:1.5rem;">
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:flex-start;">
+                    <img id="detail-cover" src="" alt="Book Cover"
+                        style="width:100px; height:150px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display:none; background-color:#f1f5f9;">
+                    <div id="detail-cover-placeholder"
+                        style="width:100px; height:150px; border-radius:8px; border:1px solid var(--border); background-color:#f1f5f9; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.75rem; text-align:center; padding:0.5rem;">
+                        No Cover Image</div>
+                </div>
+                <div style="display:grid; gap:0.75rem;">
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">ID:</strong>
+                        <span id="detail-id"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Title:</strong>
+                        <span id="detail-title" style="font-weight:600; color:var(--primary);"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Author:</strong>
+                        <span id="detail-author"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Category:</strong>
+                        <span id="detail-category" class="badge badge-neutral"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Total
+                            Copies:</strong>
+                        <span id="detail-total"></span>
+                    </div>
+                    <div><strong style="color:var(--text-muted); display:inline-block; width:130px;">Available
+                            Copies:</strong>
+                        <span id="detail-available"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Section -->
+            <div id="summary-section"
+                style="border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">AI Book Summary</h3>
+                    <button id="generate-summary-btn" class="btn btn-outline"
+                        style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">Generate Summary</button>
+                </div>
+                <div id="summary-content" style="display: none;">
+                    <div class="card"
+                        style="background: var(--bg-light); border: 1px dashed var(--primary); padding: 1rem;">
+                        <p id="summary-desc" style="font-style: italic; color: var(--text-main); margin-bottom: 1rem;">
+                        </p>
+                        <ul id="summary-points" style="padding-left: 1.25rem; margin-bottom: 1rem; line-height: 1.6;">
+                        </ul>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="font-weight: 600; font-size: 0.85rem;">Difficulty:</span>
+                            <span id="summary-difficulty" class="badge"></span>
+                        </div>
+                    </div>
+                </div>
+                <div id="summary-loading"
+                    style="display: none; text-align: center; color: var(--text-muted); padding: 1rem;">
+                    Generating smart summary...
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top: 2rem;">
+                <button class="btn btn-outline" onclick="closeBookDetailsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Request Book Modal -->
+    <div id="request-book-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Request New Book</h2>
+                <button class="btn btn-outline" style="border:none;" onclick="closeRequestBookModal()">&times;</button>
+            </div>
+            <form id="request-book-form" style="margin-top: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Book Title</label>
+                    <input type="text" id="req-title" class="form-control" required placeholder="e.g. Clean Code">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Author Name</label>
+                    <input type="text" id="req-author" class="form-control" required
+                        placeholder="e.g. Robert C. Martin">
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="btn btn-outline" onclick="closeRequestBookModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            requireRole('student');
+
+            const container = document.getElementById('books-container');
+            const alertBox = document.getElementById('alert-box');
+
+            const searchInput = document.getElementById('search-input');
+            const categoryFilter = document.getElementById('category-filter');
+            let debounceTimer;
+            let currentBookId;
+
+            async function loadBooks() {
+                try {
+                    const data = await fetchAPI('books/');
+                    const books = data.results || data; // Handle pagination structure if present
+
+                    if (books.length === 0) {
+                        container.innerHTML = `<p>No books available.</p>`;
+                        return;
+                    }
+
+                    // Populate categories uniquely
+                    const categories = [...new Set(books.map(b => b.category))].filter(Boolean);
+                    if (categoryFilter.options.length === 1) {
+                        categories.forEach(cat => {
+                            const opt = document.createElement('option');
+                            opt.value = cat;
+                            opt.textContent = cat;
+                            categoryFilter.appendChild(opt);
+                        });
+                    }
+
+                    container.innerHTML = books.map(b => {
+                        const badgeClass = b.available_copies > 0 ? 'badge-approved' : 'badge-rejected';
+                        const badgeText = b.available_copies > 0 ? `${b.available_copies} Available` : 'Out of Stock';
+                        const escapedBook = JSON.stringify(b).replace(/"/g, '&quot;');
+
+                        const coverHtml = b.cover_image
+                            ? `<img src="${b.cover_image}" alt="Cover" style="height:140px; width:95px; min-width:95px; object-fit:cover; border-radius:8px; border:1px solid var(--border);">`
+                            : `<div style="height:140px; width:95px; min-width:95px; border-radius:8px; background-color:#f1f5f9; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.75rem; border:1px solid var(--border); text-align:center;">No Cover</div>`;
+
+                        return `
+                        <div class="card card-hoverable" style="cursor:pointer; display:flex; gap:1rem; align-items:flex-start;" onclick="openBookDetailsModal(${escapedBook})">
+                            ${coverHtml}
+                            <div style="display:flex; flex-direction:column; flex:1; min-height:140px; justify-content:space-between;">
+                                <div>
+                                    <h3 style="margin-bottom:0.25rem; font-size:1.1rem; line-height:1.3;">${b.title}</h3>
+                                    <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1rem;">by ${b.author_name} &bull; ${b.category}</p>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem;" onclick="event.stopPropagation();">
+                                    <span class="badge ${badgeClass}">${badgeText}</span>
+                                    ${b.available_copies > 0
+                                ? `<button class="btn btn-primary" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="requestBook(${b.id})">Request</button>`
+                                : `<button class="btn btn-outline" style="padding:0.4rem 0.8rem; font-size:0.85rem;" onclick="joinWaitlist(${b.id})">Waitlist</button>`
+                            }
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    }).join('');
+                } catch (err) {
+                    console.error("Failed to load books", err);
+                }
+            }
+
+            window.requestBook = async function (bookId) {
+                try {
+                    const resp = await fetchAPI('requests/', {
+                        method: 'POST',
+                        body: JSON.stringify({ book: bookId })
+                    });
+                    showToast('Book requested successfully!', 'success');
+                    loadBooks(); // refresh list
+                } catch (err) {
+                    showToast(err.data?.detail || 'Failed to request book.', 'error');
+                }
+            };
+
+            window.joinWaitlist = async function (bookId) {
+                try {
+                    const resp = await fetchAPI('waitlists/', {
+                        method: 'POST',
+                        body: JSON.stringify({ book: bookId })
+                    });
+                    showToast('Joined waitlist successfully!', 'success');
+                } catch (err) {
+                    showToast(err.data?.detail || err.message || 'Failed to join waitlist.', 'error');
+                }
+            };
+
+            // --- Book Details Logic ---
+            window.openBookDetailsModal = function (book) {
+                currentBookId = book.id;
+                document.getElementById('detail-id').textContent = `#${book.id}`;
+                document.getElementById('detail-title').textContent = book.title;
+                document.getElementById('detail-author').textContent = book.author_name;
+                document.getElementById('detail-category').textContent = book.category;
+                document.getElementById('detail-total').textContent = book.total_copies;
+
+                const availElem = document.getElementById('detail-available');
+                availElem.textContent = book.available_copies;
+                availElem.style.color = book.available_copies === 0 ? 'var(--danger)' : 'var(--success)';
+                availElem.style.fontWeight = 'bold';
+
+                // Reset summary view
+                document.getElementById('summary-content').style.display = 'none';
+                document.getElementById('generate-summary-btn').style.display = 'block';
+
+                // If summary exists in book object (passed from API if we update serializer later)
+                // For now, we'll fetch it or have the button handle it
+
+                const coverImg = document.getElementById('detail-cover');
+                const coverPlaceholder = document.getElementById('detail-cover-placeholder');
+
+                if (book.cover_image) {
+                    coverImg.src = book.cover_image;
+                    coverImg.style.display = 'block';
+                    coverPlaceholder.style.display = 'none';
+                } else {
+                    coverImg.style.display = 'none';
+                    coverPlaceholder.style.display = 'flex';
+                }
+
+                document.getElementById('book-details-modal').classList.add('open');
+            }
+
+            window.closeBookDetailsModal = function () {
+                document.getElementById('book-details-modal').classList.remove('open');
+            }
+
+            // --- AI Summary Logic ---
+            const generateBtn = document.getElementById('generate-summary-btn');
+            generateBtn.addEventListener('click', async () => {
+                const loading = document.getElementById('summary-loading');
+                const content = document.getElementById('summary-content');
+
+                generateBtn.style.display = 'none';
+                loading.style.display = 'block';
+
+                try {
+                    const summary = await fetchAPI(`books/${currentBookId}/generate-summary/`, {
+                        method: 'POST'
+                    });
+
+                    document.getElementById('summary-desc').textContent = summary.short_description;
+                    const pointsList = document.getElementById('summary-points');
+                    pointsList.innerHTML = summary.key_points.map(p => `<li>${p}</li>`).join('');
+
+                    const diffBadge = document.getElementById('summary-difficulty');
+                    diffBadge.textContent = summary.difficulty_level;
+                    diffBadge.className = 'badge ' + (
+                        summary.difficulty_level === 'Easy' ? 'badge-approved' :
+                            summary.difficulty_level === 'Medium' ? 'badge-neutral' : 'badge-rejected'
+                    );
+
+                    loading.style.display = 'none';
+                    content.style.display = 'block';
+                } catch (err) {
+                    showToast('Failed to generate summary.', 'error');
+                    generateBtn.style.display = 'block';
+                    loading.style.display = 'none';
+                }
+            });
+
+            // --- Book Demand Logic ---
+            window.openRequestBookModal = (prefillTitle = '') => {
+                document.getElementById('request-book-modal').classList.add('open');
+                if (prefillTitle && typeof prefillTitle === 'string') {
+                    document.getElementById('req-title').value = prefillTitle;
+                }
+            };
+            window.closeRequestBookModal = () => {
+                document.getElementById('request-book-modal').classList.remove('open');
+                document.getElementById('request-book-form').reset();
+            };
+
+            const requestBookForm = document.getElementById('request-book-form');
+            requestBookForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const title = document.getElementById('req-title').value;
+                const author = document.getElementById('req-author').value;
+
+                try {
+                    await fetchAPI('demands/', {
+                        method: 'POST',
+                        body: JSON.stringify({ title, author })
+                    });
+                    showToast('Book request submitted!', 'success');
+                    closeRequestBookModal();
+                } catch (err) {
+                    showToast(err.data?.detail || 'Failed to submit request.', 'error');
+                }
+            });
+
+            // Search and filtering listeners
+            function applyFilters() {
+                const term = searchInput.value.toLowerCase().trim();
+                const cat = categoryFilter.value;
+                const cards = container.querySelectorAll('.card');
+                let visibleCount = 0;
+
+                cards.forEach(card => {
+                    // Check if it's the "Not Found" card we injected
+                    if (card.id === 'no-results-card') {
+                        card.remove();
+                        return;
+                    }
+
+                    const title = card.querySelector('h3').textContent.toLowerCase();
+                    const meta = card.querySelector('p').textContent.toLowerCase();
+                    const matchesSearch = title.includes(term) || meta.includes(term);
+                    const matchesCat = cat === "" || meta.includes(cat.toLowerCase());
+
+                    if (matchesSearch && matchesCat) {
+                        card.style.display = 'flex';
+                        visibleCount++;
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+
+                // If no results, show a friendly message
+                if (visibleCount === 0) {
+                    const noResultsHtml = `
+                        <div id="no-results-card" class="card" style="grid-column: 1/-1; text-align: center; padding: 3rem; background: var(--neutral-bg); border: 2px dashed var(--neutral-border);">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
+                            <h3 style="margin-bottom: 0.5rem;">Book Not Found</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">We couldn't find any books matching "${searchInput.value}".</p>
+                            <button class="btn btn-primary" onclick="openRequestBookModal('${searchInput.value.replace(/'/g, "\\'")}')">
+                                Request "${searchInput.value}" for the Library
+                            </button>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', noResultsHtml);
+                }
+            }
+
+            searchInput.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(applyFilters, 300);
+            });
+
+            categoryFilter.addEventListener('change', applyFilters);
+
+            loadBooks();
+        });
+    </script>
+</body>
+
+</html>
