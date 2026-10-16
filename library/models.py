@@ -86,26 +86,29 @@ class Student(models.Model):
         super().save(*args, **kwargs)
 
         if generate_qr and self.roll_no:
-            # Generate Code 128 Barcode for Student Roll Number
-            COD128 = barcode.get_barcode_class('code128')
-            writer = ImageWriter()
-            # Set fixed height for barcodes to look consistent
-            writer.set_options({
-                'module_height': 5.0,
-                'font_size': 0, # Hide text as it's often on the ID already
-                'text_distance': 0,
-            })
-            
-            # Data for student barcode is just their roll_no
-            barcode_instance = COD128(self.roll_no, writer=writer)
-            
-            buffer = BytesIO()
-            barcode_instance.write(buffer)
-            
-            safe_name = sanitize_filename(self.name)
-            filename = f"user_barcode_{safe_name}_{self.roll_no}.png"
-            self.qr_image.save(filename, File(buffer), save=False)
-            Student.objects.filter(pk=self.pk).update(qr_image=self.qr_image)
+            try:
+                # Generate Code 128 Barcode for Student Roll Number
+                COD128 = barcode.get_barcode_class('code128')
+                writer = ImageWriter()
+                # Set fixed height for barcodes to look consistent
+                writer.set_options({
+                    'module_height': 5.0,
+                    'font_size': 0, # Hide text as it's often on the ID already
+                    'text_distance': 0,
+                })
+                
+                # Data for student barcode is just their roll_no
+                barcode_instance = COD128(self.roll_no, writer=writer)
+                
+                buffer = BytesIO()
+                barcode_instance.write(buffer)
+                
+                safe_name = sanitize_filename(self.name)
+                filename = f"user_barcode_{safe_name}_{self.roll_no}.png"
+                self.qr_image.save(filename, File(buffer), save=False)
+                Student.objects.filter(pk=self.pk).update(qr_image=self.qr_image)
+            except Exception:
+                pass
 
     def __str__(self):
         return f"{self.roll_no} - {self.name}"
@@ -139,21 +142,24 @@ class Book(models.Model):
         super().save(*args, **kwargs)
 
         if generate_qr:
-            # Generate Code 128 Barcode for Book
-            COD128 = barcode.get_barcode_class('code128')
-            writer = ImageWriter()
-            writer.set_options({'module_height': 5.0, 'font_size': 0})
-            
-            # Using BOOK prefix for identification
-            barcode_instance = COD128(f"BOOK:{str(self.qr_uid)[:12]}", writer=writer)
-            
-            buffer = BytesIO()
-            barcode_instance.write(buffer)
-            
-            safe_title = sanitize_filename(self.title)
-            filename = f"book_barcode_{safe_title}_{str(self.qr_uid)[:8]}.png"
-            self.qr_image.save(filename, File(buffer), save=False)
-            Book.objects.filter(pk=self.pk).update(qr_image=self.qr_image)
+            try:
+                # Generate Code 128 Barcode for Book
+                COD128 = barcode.get_barcode_class('code128')
+                writer = ImageWriter()
+                writer.set_options({'module_height': 5.0, 'font_size': 0})
+                
+                # Using BOOK prefix for identification
+                barcode_instance = COD128(f"BOOK:{str(self.qr_uid)[:12]}", writer=writer)
+                
+                buffer = BytesIO()
+                barcode_instance.write(buffer)
+                
+                safe_title = sanitize_filename(self.title)
+                filename = f"book_barcode_{safe_title}_{str(self.qr_uid)[:8]}.png"
+                self.qr_image.save(filename, File(buffer), save=False)
+                Book.objects.filter(pk=self.pk).update(qr_image=self.qr_image)
+            except Exception:
+                pass
 
         # After saving, ensure BookCopies match total_copies
         from .models import BookCopy

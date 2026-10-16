@@ -41,7 +41,11 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+if 'VERCEL' in os.environ:
+    MEDIA_ROOT = '/tmp/media'
+    os.makedirs(MEDIA_ROOT, exist_ok=True)
+else:
+    MEDIA_ROOT = BASE_DIR / 'media'
 
 FINE_PER_DAY = 5
 

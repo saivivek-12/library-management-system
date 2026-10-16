@@ -104,25 +104,29 @@
 
             const signupForm = document.getElementById('signup-form');
             const alertBox = document.getElementById('signup-alert');
+            const submitBtn = signupForm.querySelector('button[type="submit"]');
 
             signupForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 alertBox.style.display = 'none';
 
-                const username = document.getElementById('username').value;
-                const email = document.getElementById('email').value;
+                const username = document.getElementById('username').value.trim();
+                const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
-                const name = document.getElementById('name').value;
-                const roll_no = document.getElementById('roll_no').value;
+                const name = document.getElementById('name').value.trim();
+                const roll_no = document.getElementById('roll_no').value.trim();
                 const department = document.getElementById('department').value;
 
                 // Optional fields
                 const yearRaw = document.getElementById('year').value;
-                const phone = document.getElementById('phone').value;
+                const phone = document.getElementById('phone').value.trim();
 
                 const payload = { username, email, password, name, roll_no, department };
                 if (yearRaw) payload.year = parseInt(yearRaw);
                 if (phone) payload.phone = phone;
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Creating Account...';
 
                 try {
                     // Register the student
@@ -132,11 +136,16 @@
                         body: JSON.stringify(payload)
                     });
 
+                    let errData = {};
+                    try {
+                        errData = await resp.json();
+                    } catch (parseErr) {
+                        errData = {};
+                    }
+
                     if (!resp.ok) {
-                        const errData = await resp.json();
                         let errorMsg = errData.detail || 'Registration failed.';
-                        // Capture Django standard validation errors if present
-                        if (!errData.detail) {
+                        if (!errData.detail && typeof errData === 'object') {
                             const errors = [];
                             for (const [key, value] of Object.entries(errData)) {
                                 errors.push(`${key}: ${Array.isArray(value) ? value.join(', ') : value}`);
@@ -146,31 +155,50 @@
                         throw new Error(errorMsg);
                     }
 
+                    // Show prominent success feedback
+                    alertBox.innerHTML = `
+                        <div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.25rem;">✅ Account Created Successfully!</div>
+                        <div>Welcome, <strong>${name}</strong>! Logging you into the Central Library...</div>
+                    `;
+                    alertBox.className = 'alert alert-success';
+                    alertBox.style.display = 'block';
+                    showToast('Account created successfully!', 'success');
+
                     // On success, auto-login
-                    const loginResp = await fetch('/api/token/', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, password })
-                    });
+                    try {
+                        const loginResp = await fetch('/api/token/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, password })
+                        });
 
-                    if (loginResp.ok) {
-                        const data = await loginResp.json();
-                        sessionStorage.setItem('access_token', data.access);
-                        sessionStorage.setItem('refresh_token', data.refresh);
-
-                        // It's a student account we just created
-                        sessionStorage.setItem('user_role', 'student');
-                        window.location.href = '/books/';
-                    } else {
-                        // If auto-login fails for some reason
-                        alertBox.innerHTML = 'Account created successfully! Please <a href="/">sign in</a>.';
-                        alertBox.className = 'alert alert-success';
-                        alertBox.style.display = 'block';
-                        signupForm.reset();
+                        if (loginResp.ok) {
+                            const data = await loginResp.json();
+                            sessionStorage.setItem('access_token', data.access);
+                            sessionStorage.setItem('refresh_token', data.refresh);
+                            sessionStorage.setItem('user_role', 'student');
+                            setTimeout(() => {
+                                window.location.href = '/books/';
+                            }, 1200);
+                            return;
+                        }
+                    } catch (loginErr) {
+                        // ignore and redirect to sign in
                     }
 
+                    // Fallback redirect to sign-in page
+                    setTimeout(() => {
+                        window.location.href = '/?registered=1';
+                    }, 1800);
+
                 } catch (err) {
+                    alertBox.innerHTML = err.message || 'Registration failed.';
+                    alertBox.className = 'alert alert-danger';
+                    alertBox.style.display = 'block';
                     showToast(err.message || 'Registration failed.', 'error');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Sign Up';
                 }
             });
         });

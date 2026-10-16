@@ -8,7 +8,7 @@ from django.core.mail import send_mail
 from django.http import HttpResponse
 from django.utils import timezone
 
-from rest_framework import viewsets, status, generics
+from rest_framework import viewsets, status, generics, exceptions
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.decorators import action
@@ -1025,40 +1025,64 @@ class StudentSignupView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     
     def create(self, request, *args, **kwargs):
-        username = request.data.get('username')
-        password = request.data.get('password')
-        email = request.data.get('email')
-        name = request.data.get('name')
-        roll_no = request.data.get('roll_no')
-        department = request.data.get('department')
+        username = (request.data.get('username') or '').strip()
+        password = (request.data.get('password') or '').strip()
+        email = (request.data.get('email') or '').strip().lower()
+        name = (request.data.get('name') or '').strip()
+        roll_no = (request.data.get('roll_no') or '').strip().upper()
+        department = (request.data.get('department') or 'CSE').strip()
         year = request.data.get('year')
-        phone = request.data.get('phone')
+        phone = (request.data.get('phone') or '').strip()
 
-        if not all([username, password, email, name, roll_no, department]):
-            return Response({"detail": "All required fields (including department) must be provided."}, status=status.HTTP_400_BAD_REQUEST)
+        if not all([username, password, email, name, roll_no]):
+            return Response(
+                {"detail": "Please fill in all required fields (username, password, email, full name, and roll number)."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         from django.contrib.auth.models import User
-        if User.objects.filter(username=username).exists():
-            return Response({"detail": "Username already taken."}, status=status.HTTP_400_BAD_REQUEST)
-        if Student.objects.filter(roll_no=roll_no).exists():
-            return Response({"detail": "Roll number already registered."}, status=status.HTTP_400_BAD_REQUEST)
-        if Student.objects.filter(email=email).exists():
-            return Response({"detail": "Email already registered."}, status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(username__iexact=username).exists():
+            return Response(
+                {"detail": "This username is already taken. Please choose another username."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if Student.objects.filter(roll_no__iexact=roll_no).exists():
+            return Response(
+                {"detail": f"Roll number {roll_no} is already registered. Please sign in with your credentials."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if User.objects.filter(email__iexact=email).exists() or Student.objects.filter(email__iexact=email).exists():
+            return Response(
+                {"detail": "This email address is already registered. Please sign in or use another email."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         user = User.objects.create_user(username=username, email=email, password=password)
+        user.is_staff = False
+        user.is_superuser = False
+        user.save()
+
         student = Student.objects.create(
             user=user, 
             name=name, 
             roll_no=roll_no, 
             email=email,
             department=department,
-            year=year,
-            phone=phone
+            year=year if year else None,
+            phone=phone if phone else None,
+            role=Student.ROLE_STUDENT,
+            is_active=True
         )
 
-        create_audit_log(user, "Signup", "Student", student.id, f"Student signed up {roll_no}")
+        create_audit_log(user, "Signup", "Student", student.id, f"Student {name} signed up ({roll_no})")
 
-        return Response({"detail": "Student registered successfully.", "student_id": student.id}, status=status.HTTP_201_CREATED)
+        return Response({
+            "detail": "Account created successfully! You can now sign in.",
+            "success": True,
+            "username": username,
+            "roll_no": roll_no,
+            "student_id": student.id
+        }, status=status.HTTP_201_CREATED)
 
 
 class BookCopyViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1542,9 +1566,6 @@ def auto_create_or_get_student(roll_no, password=None, display_name=None):
             user.save()
             student.user = user
             student.save(update_fields=['user'])
-        elif password:
-            student.user.set_password(password)
-            student.user.save()
 
     return student
 
@@ -1607,7 +1628,48 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     }
                 }
 
-        # 3. Standard fallback authentication
+        # 3. Flexible lookup by Roll Number, Email, or Username
+        user = None
+        # Check by Roll Number
+        student = Student.objects.filter(roll_no__iexact=raw_username).first()
+        if student and student.user and student.user.check_password(raw_password):
+            user = student.user
+        
+        # Check by Email
+        if not user:
+            found_user = User.objects.filter(email__iexact=raw_username).first()
+            if found_user and found_user.check_password(raw_password):
+                user = found_user
+
+        # Check by Username
+        if not user:
+            found_user = User.objects.filter(username__iexact=raw_username).first()
+            if found_user and found_user.check_password(raw_password):
+                user = found_user
+
+        if user:
+            if not user.is_active:
+                raise exceptions.AuthenticationFailed("Account is inactive.")
+            refresh = RefreshToken.for_user(user)
+            role = 'admin' if user.is_staff else 'student'
+            name = user.get_full_name() or user.username
+            if hasattr(user, 'student') and user.student:
+                role = 'admin' if user.student.role in ['SUPER_ADMIN', 'LIBRARIAN'] else 'student'
+                name = user.student.name or name
+
+            return {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'role': role,
+                    'name': name
+                }
+            }
+
+        # 4. Standard fallback authentication
         return super().validate(attrs)
 
 

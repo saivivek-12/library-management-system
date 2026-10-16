@@ -77,22 +77,59 @@
     <!-- Forgot Password logic moved to /forgot-password/ -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Redirect if already logged in
-            if (isAuthenticated()) {
-                const role = getUserRole();
-                if (role === 'admin') window.location.href = '/admin-dashboard/';
-                else if (role === 'student') window.location.href = '/books/';
-            }
-
             const loginForm = document.getElementById('login-form');
             const alertBox = document.getElementById('login-alert');
+            const submitBtn = loginForm.querySelector('button[type="submit"]');
+
+            // Check if user arrived from successful signup
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('registered') === '1') {
+                alertBox.textContent = 'Registration successful! Please sign in with your credentials.';
+                alertBox.className = 'alert alert-success';
+                alertBox.style.display = 'block';
+            }
+
+            // Only redirect if there is an active session and it is genuinely valid
+            if (isAuthenticated()) {
+                const token = sessionStorage.getItem('access_token');
+                const role = getUserRole();
+                fetch('/api/students/me/', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).then(res => {
+                    if (res.ok) {
+                        if (role === 'admin') window.location.href = '/admin-dashboard/';
+                        else window.location.href = '/books/';
+                    } else {
+                        // Stale or invalid session - clear silently to allow fresh login
+                        sessionStorage.removeItem('access_token');
+                        sessionStorage.removeItem('refresh_token');
+                        sessionStorage.removeItem('user_role');
+                    }
+                }).catch(() => {
+                    sessionStorage.removeItem('access_token');
+                    sessionStorage.removeItem('refresh_token');
+                    sessionStorage.removeItem('user_role');
+                });
+            }
 
             loginForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 alertBox.style.display = 'none';
 
-                const username = document.getElementById('username').value;
+                const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value;
+
+                if (!username) {
+                    showToast('Please enter your roll number or username.', 'error');
+                    return;
+                }
+                if (!password) {
+                    showToast('Please enter your password.', 'error');
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Signing in...';
 
                 try {
                     const resp = await fetch('/api/token/', {
@@ -101,23 +138,38 @@
                         body: JSON.stringify({ username, password })
                     });
 
-                    if (!resp.ok) {
-                        throw new Error('Invalid username or password.');
+                    let data = {};
+                    try {
+                        data = await resp.json();
+                    } catch (parseErr) {
+                        data = {};
                     }
 
-                    const data = await resp.json();
+                    if (!resp.ok) {
+                        throw new Error(data.detail || 'Invalid username, roll number, or password.');
+                    }
+
                     sessionStorage.setItem('access_token', data.access);
                     sessionStorage.setItem('refresh_token', data.refresh);
 
-                    // Check role and redirect
+                    // Check role and redirect smoothly
                     const role = await checkAndStoreUserRole();
-                    if (role === 'admin') {
-                        window.location.href = '/admin-dashboard/';
-                    } else {
-                        window.location.href = '/books/';
-                    }
+                    showToast('Login successful! Redirecting...', 'success');
+                    setTimeout(() => {
+                        if (role === 'admin') {
+                            window.location.href = '/admin-dashboard/';
+                        } else {
+                            window.location.href = '/books/';
+                        }
+                    }, 400);
                 } catch (err) {
+                    alertBox.textContent = err.message || 'Login failed.';
+                    alertBox.className = 'alert alert-danger';
+                    alertBox.style.display = 'block';
                     showToast(err.message || 'Login failed.', 'error');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Sign In';
                 }
             });
         });
