@@ -106,9 +106,10 @@ WSGI_APPLICATION = 'library_backend.wsgi.application'
 
 import dj_database_url
 
+default_sqlite = 'sqlite:////tmp/db.sqlite3' if 'VERCEL' in os.environ else 'sqlite:///' + str(BASE_DIR / 'db.sqlite3')
 DATABASES = {
     'default': dj_database_url.config(
-        default='sqlite:///' + str(BASE_DIR / 'db.sqlite3'),
+        default=default_sqlite,
         conn_max_age=600
     )
 }
