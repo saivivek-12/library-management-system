@@ -1,5 +1,5 @@
 :root {
-    /* SaaS Color Palette */
+    /* Portal Theme Palette */
     --primary: #2563eb;
     --primary-hover: #1d4ed8;
     --primary-light: #eff6ff;
@@ -80,7 +80,7 @@ body {
 }
 
 /* -------------------------------------
-   LAYOUT: SIDEBAR + MAIN (SaaS Style)
+   LAYOUT: SIDEBAR + MAIN
 -------------------------------------- */
 #app-layout {
     display: flex;

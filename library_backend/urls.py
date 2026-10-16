@@ -17,7 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.generic import TemplateView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
+from library.views import CustomTokenObtainPairView
 import os
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -28,7 +29,7 @@ urlpatterns = [
     path("api/", include("library.urls")),
 
     # JWT endpoints
-    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 ]
 from drf_yasg.views import get_schema_view
